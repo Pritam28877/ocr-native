@@ -10,8 +10,11 @@ export default function TabLayout() {
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const toggleNotifications = useUIStore((s) => s.toggleNotifications);
   const insets = useSafeAreaInsets();
-  const tabBarPaddingBottom = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 10);
-  const tabBarHeight = (Platform.OS === 'ios' ? 64 : 56) + tabBarPaddingBottom;
+  // Ensure the tab bar sits above the system navigation by including safe-area inset
+  const baseTabHeight = Platform.OS === 'ios' ? 70 : 62;
+  const minPaddingBottom = Platform.OS === 'ios' ? 20 : 10;
+  const tabBarPaddingBottom = Math.max(insets.bottom, minPaddingBottom);
+  const tabBarHeight = baseTabHeight + tabBarPaddingBottom;
 
   return (
     <Tabs
