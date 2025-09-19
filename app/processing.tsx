@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, Animated, Image } from 'react-native';
+import { Saturate, Contrast, Brightness } from 'react-native-color-matrix-image-filters';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Bookmark, User, Sparkles, FileText } from 'lucide-react-native';
 import { useEffect, useRef } from 'react';
@@ -7,7 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProcessingScreen() {
-  const { imageUri } = useLocalSearchParams<{ imageUri?: string }>();
+  const { imageUri, ocrPreview } = useLocalSearchParams<{ imageUri?: string; ocrPreview?: string }>();
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -20,7 +21,11 @@ export default function ProcessingScreen() {
     }).start(() => {
       // Navigate to quotation after processing
       setTimeout(() => {
-        router.push('/quotation');
+        if (imageUri) {
+          router.push({ pathname: '/quotation', params: { imageUri: String(imageUri) } });
+        } else {
+          router.push('/quotation');
+        }
       }, 1000);
     });
 
@@ -88,7 +93,22 @@ export default function ProcessingScreen() {
           <Text style={styles.processingSubtitle}>Please wait while we process your document...</Text>
 
           {imageUri ? (
-            <Image source={{ uri: String(imageUri) }} style={styles.preview} resizeMode="cover" />
+            <>
+              {ocrPreview ? (
+                <Saturate amount={0}>
+                  <Contrast amount={1.25}>
+                    <Brightness amount={1.0}>
+                      <Image source={{ uri: String(imageUri) }} style={styles.preview} resizeMode="cover" />
+                    </Brightness>
+                  </Contrast>
+                </Saturate>
+              ) : (
+                <Image source={{ uri: String(imageUri) }} style={styles.preview} resizeMode="cover" />
+              )}
+              <Text style={[styles.previewBadge, ocrPreview ? styles.previewBadgeWarn : styles.previewBadgeOk]}>
+                {ocrPreview ? 'Preview only — server OCR conversion in progress' : 'Using OCR-processed image'}
+              </Text>
+            </>
           ) : null}
 
           <View style={styles.progressContainer}>
@@ -225,6 +245,18 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 12,
     marginBottom: 16,
+  },
+  previewBadge: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: -10,
+    marginBottom: 10,
+  },
+  previewBadgeWarn: {
+    color: '#F59E0B',
+  },
+  previewBadgeOk: {
+    color: '#10B981',
   },
   progressContainer: {
     width: '100%',

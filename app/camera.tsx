@@ -5,6 +5,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Camera as CameraIcon, Sparkles } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import ViewShot from 'react-native-view-shot';
 import { Saturate, Contrast, Brightness } from 'react-native-color-matrix-image-filters';
 
 export default function CameraScreen() {
@@ -14,8 +15,7 @@ export default function CameraScreen() {
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [processingPreview, setProcessingPreview] = useState(false);
   const [shouldRenderFilter, setShouldRenderFilter] = useState(false);
-  const [ViewShotComp, setViewShotComp] = useState<any>(null);
-  const viewShotRef = useRef<any>(null);
+  const viewShotRef = useRef<ViewShot | null>(null);
 
   const API_URL = (process as any)?.env?.EXPO_PUBLIC_API_URL || (process as any)?.env?.EXPO_PUBLIC_API_BASE_URL || '';
 
@@ -38,7 +38,9 @@ export default function CameraScreen() {
       });
       if (!res.ok) return null;
       const data = await res.json().catch(() => null);
-      return data;
+      // Try common fields for processed image
+      const processedUri = data?.processedImageUri || data?.imageUrl || data?.fileUrl || null;
+      return { processedUri, raw: data };
     } catch (_e) {
       return null;
     }
@@ -50,21 +52,7 @@ export default function CameraScreen() {
     }
   }, [permission]);
 
-  // Try to load react-native-view-shot dynamically to avoid crashing on Expo Go
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const mod: any = await import('react-native-view-shot');
-        if (!cancelled) setViewShotComp(mod?.default ?? null);
-      } catch (_e) {
-        if (!cancelled) setViewShotComp(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Dev build path: use ViewShot to capture filtered image.
 
   const onTakePicture = useCallback(async () => {
     if (!cameraRef.current || isCapturing) return;
@@ -79,11 +67,7 @@ export default function CameraScreen() {
       setShouldRenderFilter(true);
       setProcessingPreview(true);
       
-      // If ViewShot is available (dev build), render filtered image offscreen, capture it, then upload & navigate.
-      // Otherwise, fall back to uploading the original (backend should apply OCR preprocessing server-side).
-      if (!ViewShotComp) {
-        uploadOcrImage(photo.uri).finally(() => {});
-      }
+      // Hidden ViewShot below will capture filtered image, upload, then navigate.
     } catch (e) {
       setIsCapturing(false);
     }
@@ -118,11 +102,19 @@ export default function CameraScreen() {
 
       <View style={styles.cameraWrapper}>
         {previewUri ? (
-          <Image source={{ uri: previewUri }} style={styles.preview} resizeMode="contain" />
+          shouldRenderFilter ? (
+            <Saturate amount={0}>
+              <Contrast amount={1.25}>
+                <Brightness amount={1.0}>
+                  <Image source={{ uri: previewUri }} style={styles.preview} resizeMode="contain" />
+                </Brightness>
+              </Contrast>
+            </Saturate>
+          ) : (
+            <Image source={{ uri: previewUri }} style={styles.preview} resizeMode="contain" />
+          )
         ) : (
-          <CameraView ref={cameraRef} style={styles.camera} facing="back">
-            <View style={styles.overlay} />
-          </CameraView>
+          <CameraView ref={cameraRef} style={styles.camera} facing="back" />
         )}
         <View style={styles.controls}>
           <TouchableOpacity style={styles.captureButton} onPress={onTakePicture} disabled={isCapturing}>
@@ -131,17 +123,18 @@ export default function CameraScreen() {
         </View>
       </View>
 
-      {/* Preview the OCR-friendly look in UI (grayscale+contrast). For Expo Go, we cannot save this without a dev build. */}
-      {shouldRenderFilter && previewUri && ViewShotComp ? (
+      {/* Hidden offscreen filtered capture for dev build */}
+      {shouldRenderFilter && previewUri ? (
         <View style={styles.hiddenContainer}>
-          <ViewShotComp
+          <ViewShot
             ref={viewShotRef}
             style={styles.hiddenShot}
             options={{ format: 'jpg', quality: 1 }}
             onCapture={async (uri: string) => {
-              // Upload processed OCR-friendly image, then navigate
-              await uploadOcrImage(uri);
-              router.push({ pathname: '/processing', params: { imageUri: uri } });
+              // Upload processed OCR-friendly image, then navigate with server version if it returns one
+              const result = await uploadOcrImage(uri);
+              const processed = result?.processedUri || uri;
+              router.push({ pathname: '/processing', params: { imageUri: processed } });
               setIsCapturing(false);
               setProcessingPreview(false);
               setShouldRenderFilter(false);
@@ -169,7 +162,7 @@ export default function CameraScreen() {
                 </Brightness>
               </Contrast>
             </Saturate>
-          </ViewShotComp>
+          </ViewShot>
         </View>
       ) : null}
 

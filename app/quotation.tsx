@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Plus, Bookmark, User, CreditCard as Edit, Download, Share } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as MediaLibrary from 'expo-media-library';
+import { useEffect, useState } from 'react';
 
 interface QuotationItem {
   id: string;
@@ -45,6 +47,38 @@ const sampleItems: QuotationItem[] = [
 ];
 
 export default function QuotationScreen() {
+  const { imageUri } = useLocalSearchParams<{ imageUri?: string }>();
+  const [hasMediaPerm, setHasMediaPerm] = useState<boolean>(false);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      setHasMediaPerm(status === 'granted');
+    })();
+  }, []);
+
+  const handleDownloadOcrImage = async () => {
+    try {
+      if (!imageUri) {
+        Alert.alert('No Image', 'There is no OCR image to download.');
+        return;
+      }
+      if (!hasMediaPerm) {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission required', 'Media library permission is needed to save the image.');
+          return;
+        }
+        setHasMediaPerm(true);
+      }
+      await MediaLibrary.saveToLibraryAsync(String(imageUri));
+      {
+        Alert.alert('Saved', 'OCR image saved to your gallery.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to save image.');
+    }
+  };
   const subtotal = sampleItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
   const gstAmount = sampleItems.reduce((sum, item) => sum + (item.quantity * item.price * item.gst / 100), 0);
   const grandTotal = subtotal + gstAmount;
@@ -153,9 +187,9 @@ export default function QuotationScreen() {
               <Text style={styles.pdfButtonText}>Save PDF</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.whatsappButton}>
+            <TouchableOpacity style={styles.whatsappButton} onPress={handleDownloadOcrImage}>
               <Share size={18} color="#FFFFFF" />
-              <Text style={styles.whatsappButtonText}>WhatsApp</Text>
+              <Text style={styles.whatsappButtonText}>Download Image</Text>
             </TouchableOpacity>
           </View>
         </View>
