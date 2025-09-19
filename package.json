@@ -40,7 +40,6 @@
     "react-native": "0.81.4",
     "react-native-color-matrix-image-filters": "^7.0.2",
     "react-native-gesture-handler": "~2.28.0",
-    "react-native-opencv3": "^1.0.8",
     "react-native-reanimated": "~4.1.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",

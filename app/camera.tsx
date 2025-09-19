@@ -129,7 +129,7 @@ export default function CameraScreen() {
           <ViewShot
             ref={viewShotRef}
             style={styles.hiddenShot}
-            options={{ format: 'jpg', quality: 1 }}
+            options={{ format: 'jpg', quality: 1, result: 'tmpfile' }}
             onCapture={async (uri: string) => {
               // Upload processed OCR-friendly image, then navigate with server version if it returns one
               const result = await uploadOcrImage(uri);
@@ -298,14 +298,13 @@ const styles = StyleSheet.create({
   },
   hiddenContainer: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    opacity: 0,
+    top: -10000,
+    left: -10000,
   },
   hiddenShot: {
-    flex: 1,
+    width: 1200,
+    height: 1600,
+    backgroundColor: '#FFFFFF',
   },
   hiddenImage: {
     width: '100%',
