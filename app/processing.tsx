@@ -1,12 +1,13 @@
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Bookmark, User, Sparkles, FileText } from 'lucide-react-native';
 import { useEffect, useRef } from 'react';
 import { TouchableOpacity } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProcessingScreen() {
+  const { imageUri } = useLocalSearchParams<{ imageUri?: string }>();
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -85,6 +86,10 @@ export default function ProcessingScreen() {
 
           <Text style={styles.processingTitle}>AI Extracting Data</Text>
           <Text style={styles.processingSubtitle}>Please wait while we process your document...</Text>
+
+          {imageUri ? (
+            <Image source={{ uri: String(imageUri) }} style={styles.preview} resizeMode="cover" />
+          ) : null}
 
           <View style={styles.progressContainer}>
             <View style={styles.progressTrack}>
@@ -214,6 +219,12 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginBottom: 32,
+  },
+  preview: {
+    width: '100%',
+    height: 160,
+    borderRadius: 12,
+    marginBottom: 16,
   },
   progressContainer: {
     width: '100%',

@@ -41,6 +41,7 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="otp" options={{ headerShown: false }} />
+          <Stack.Screen name="camera" options={{ headerShown: false }} />
           <Stack.Screen name="processing" options={{ headerShown: false }} />
           <Stack.Screen name="quotation" options={{ headerShown: false }} />
           <Stack.Screen name="item-edit" options={{ headerShown: false, presentation: 'modal' }} />

@@ -9,7 +9,7 @@ export default function CreateQuoteScreen() {
   const { colors } = useTheme();
 
   const handleScanDocument = () => {
-    router.push('/processing');
+    router.push('/camera');
   };
 
   const handleUploadFile = () => {

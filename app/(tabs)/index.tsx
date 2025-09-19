@@ -9,7 +9,7 @@ export default function HomeScreen() {
   const { colors } = useTheme();
 
   const handleScanDocument = () => {
-    router.push('/processing');
+    router.push('/camera');
   };
 
   const handleUploadFile = () => {
