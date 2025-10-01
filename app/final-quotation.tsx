@@ -25,7 +25,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
 
 interface QuotationItem {
   itemNumber: number;
@@ -93,14 +92,6 @@ function FinalQuotationContent() {
   const [editingPrice, setEditingPrice] = useState('');
   const [editingDiscount, setEditingDiscount] = useState('');
   const [items, setItems] = useState<QuotationItem[]>([]);
-  const [hasMediaPerm, setHasMediaPerm] = useState<boolean>(false);
-
-  useEffect(() => {
-    (async () => {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      setHasMediaPerm(status === 'granted');
-    })();
-  }, []);
 
   useEffect(() => {
     try {
@@ -333,35 +324,32 @@ function FinalQuotationContent() {
     const uri = await createPdf();
     if (!uri) return;
 
-    if (!hasMediaPerm) {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission required',
-          'Media library permission is needed to save the PDF.'
-        );
-        return;
-      }
-      setHasMediaPerm(true);
-    }
-
     try {
-      const asset = await MediaLibrary.createAssetAsync(uri);
-      await MediaLibrary.createAlbumAsync('Quotations', asset, false);
-      Toast.show({
-        type: 'success',
-        text1: 'Saved!',
-        text2: 'PDF saved to your gallery in "Quotations" album.',
-        position: 'top',
-        visibilityTime: 3000,
-      });
+      // Use the native share dialog which allows saving to device
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Save or Share Quotation PDF',
+          UTI: 'com.adobe.pdf',
+        });
+
+        Toast.show({
+          type: 'success',
+          text1: 'Success!',
+          text2: 'Choose where to save your PDF.',
+          position: 'bottom',
+          visibilityTime: 2000,
+        });
+      } else {
+        Alert.alert('Error', 'Sharing is not available on this device.');
+      }
     } catch (error) {
       console.error(error);
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to save PDF.',
-        position: 'top',
+        text2: 'Failed to share PDF.',
+        position: 'bottom',
         visibilityTime: 3000,
       });
     }
