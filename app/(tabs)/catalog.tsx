@@ -19,12 +19,14 @@ import {
 import { useTheme } from '@/contexts/ThemeContext';
 import { router } from 'expo-router';
 import ImageUploadModal from '@/components/ImageUploadModal';
+import FileUploadModal from '@/components/FileUploadModal';
 import { useState, useMemo } from 'react';
 
 export default function CatalogScreen() {
   const { colors } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [showFileUploadModal, setShowFileUploadModal] = useState(false);
 
   // Real product data from API
   const products = [
@@ -290,8 +292,9 @@ export default function CatalogScreen() {
           </View>
           <TouchableOpacity
             style={[styles.filterButton, { backgroundColor: colors.primary }]}
+            onPress={() => setShowFileUploadModal(true)}
           >
-            <Filter size={20} color="#FFFFFF" />
+            <Upload size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
@@ -412,6 +415,16 @@ export default function CatalogScreen() {
         {/* Bottom Spacer */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* File Upload Modal */}
+      <FileUploadModal
+        visible={showFileUploadModal}
+        onClose={() => setShowFileUploadModal(false)}
+        onSuccess={() => {
+          // Refresh products or show success message
+          console.log('File uploaded successfully');
+        }}
+      />
     </View>
   );
 }
