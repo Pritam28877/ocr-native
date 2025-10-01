@@ -1,4 +1,14 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ScrollView,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Shield, RotateCcw } from 'lucide-react-native';
 import { useState, useRef, useEffect } from 'react';
@@ -6,29 +16,21 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { verifyCode, resendVerificationCode } from '@/lib/phoneAuth';
-import { verifyEmailLink, sendMockEmailVerification } from '@/lib/emailAuth';
-import { ConfirmationResult } from 'firebase/auth';
 
 export default function OTPScreen() {
   const { colors } = useTheme();
-  const { method, contact, verificationId, emailVerification } = useLocalSearchParams();
-  const [otp, setOtp] = useState(['', '', '', '']);
+  const { method, contact, verificationId } = useLocalSearchParams();
+  const [otp, setOtp] = useState(Array(6).fill(''));
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const inputRefs = useRef<TextInput[]>([]);
-  const [currentVerificationId, setCurrentVerificationId] = useState<string | null>(null);
-  const [emailVerificationSent, setEmailVerificationSent] = useState(false);
+  const [currentVerificationId, setCurrentVerificationId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
-    // Handle email verification
-    if (emailVerification === 'true') {
-      setEmailVerificationSent(true);
-      setCanResend(true); // Allow immediate resend for email
-      return;
-    }
-
     // Read verificationId from params for phone verification
     if (verificationId && typeof verificationId === 'string') {
       setCurrentVerificationId(verificationId);
@@ -46,22 +48,22 @@ export default function OTPScreen() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [verificationId, emailVerification]);
+  }, [verificationId]);
 
   const handleOtpChange = (value: string, index: number) => {
     if (value.length > 1) return;
-    
+
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
 
     // Auto-focus next input
-    if (value && index < 3) {
+    if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-verify when all 4 digits are entered
-    if (newOtp.every(digit => digit !== '') && newOtp.join('').length === 4) {
+    // Auto-verify when all 6 digits are entered
+    if (newOtp.every((digit) => digit !== '') && newOtp.join('').length === 6) {
       setTimeout(() => {
         handleVerifyOtp();
       }, 500);
@@ -76,31 +78,22 @@ export default function OTPScreen() {
 
   const handleVerifyOtp = async () => {
     const otpCode = otp.join('');
-    if (otpCode.length !== 4) {
-      Alert.alert('Error', 'Please enter a complete 4-digit code');
+    if (otpCode.length !== 6) {
+      Alert.alert('Error', 'Please enter a complete 6-digit code');
       return;
     }
 
     try {
       setLoading(true);
-      
-      if (emailVerification === 'true') {
-        // For email verification, we'll use a mock verification for now
-        // In production, this would verify the email link
-        console.log('📧 Verifying email with code:', otpCode);
-        // Simulate email verification
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        console.log('✅ Email verification successful');
-      } else {
-        // Phone verification
-        if (!currentVerificationId) {
-          Alert.alert('Error', 'Verification session expired. Please try again.');
-          router.back();
-          return;
-        }
-        await verifyCode(currentVerificationId, otpCode);
+
+      // Phone verification
+      if (!currentVerificationId) {
+        Alert.alert('Error', 'Verification session expired. Please try again.');
+        router.back();
+        return;
       }
-      
+      await verifyCode(currentVerificationId, otpCode);
+
       // Success - user is now authenticated
       router.replace('/(tabs)');
     } catch (error: any) {
@@ -112,21 +105,16 @@ export default function OTPScreen() {
   const handleResendOtp = async () => {
     try {
       setResending(true);
-      
-      if (emailVerification === 'true') {
-        // Resend email verification
-        await sendMockEmailVerification(contact as string);
-        Alert.alert('Success', 'Email verification link sent successfully');
-      } else {
-        // Resend phone verification
-        const { verificationId: newVerificationId } = await resendVerificationCode(contact as string);
-        setCurrentVerificationId(newVerificationId);
-        setTimer(30);
-        setCanResend(false);
-        Alert.alert('Success', 'Verification code sent successfully');
-      }
-      
-      setOtp(['', '', '', '']);
+
+      // Resend phone verification
+      const { verificationId: newVerificationId } =
+        await resendVerificationCode(contact as string);
+      setCurrentVerificationId(newVerificationId);
+      setTimer(30);
+      setCanResend(false);
+      Alert.alert('Success', 'Verification code sent successfully');
+
+      setOtp(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to resend verification');
@@ -136,134 +124,179 @@ export default function OTPScreen() {
   };
 
   const formatContact = (contact: string) => {
-    if (method === 'email') {
-      return contact;
-    } else {
-      // Format phone number
-      return contact.replace(/(\d{2})(\d{5})(\d{5})/, '+$1 $2 $3');
-    }
+    // Format phone number
+    return contact.replace(/(\d{2})(\d{5})(\d{5})/, '+$1 $2 $3');
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#8B5CF6', '#A855F7']}
-        style={styles.background}>
-        
-        <KeyboardAvoidingView 
+      <LinearGradient colors={['#8B5CF6', '#A855F7']} style={styles.background}>
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}>
-          
-          <View style={styles.content}>
-            <View style={styles.header}>
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                <ArrowLeft size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-              <Text style={styles.headerTitle}>Verify OTP</Text>
-            </View>
-
-            <View style={[styles.otpCard, { backgroundColor: colors.surface }]}>
-              <View style={styles.iconContainer}>
-                <View style={[styles.iconCircle, { backgroundColor: colors.success }]}>
-                  <Shield size={32} color="#FFFFFF" />
-                </View>
+          style={styles.keyboardView}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.content}>
+              <View style={styles.header}>
+                <TouchableOpacity
+                  style={styles.backButton}
+                  onPress={() => router.back()}
+                >
+                  <ArrowLeft size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Verify OTP</Text>
               </View>
 
-              <Text style={[styles.otpTitle, { color: colors.text }]}>
-                {emailVerification === 'true' ? 'Enter Email Verification Code' : 'Enter Verification Code'}
-              </Text>
-              <Text style={[styles.otpSubtitle, { color: colors.textSecondary }]}>
-                {emailVerification === 'true' 
-                  ? `We've sent a verification link to your email{'\n'}Please check your email and enter the 4-digit code from the link`
-                  : `We've sent a 4-digit code to{'\n'}`
-                }
-                <Text style={[styles.contactText, { color: colors.primary }]}>{formatContact(contact as string)}</Text>
-              </Text>
-              
-              {/* Development mode helper */}
-              {__DEV__ && (
-                <View style={[styles.devHelper, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}>
-                  <Text style={[styles.devHelperText, { color: colors.primary }]}>
-                    {emailVerification === 'true' 
-                      ? '📧 Development Mode: Use code "1234" for email verification'
-                      : '💡 Check your phone for the SMS code'
-                    }
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.otpInputContainer}>
-                {otp.map((digit, index) => (
-                  <TextInput
-                    key={index}
-                    ref={(ref) => {
-                      if (ref) inputRefs.current[index] = ref;
-                    }}
+              <View
+                style={[styles.otpCard, { backgroundColor: colors.surface }]}
+              >
+                <View style={styles.iconContainer}>
+                  <View
                     style={[
-                      styles.otpInput,
-                      { 
-                        backgroundColor: colors.background, 
-                        borderColor: digit ? colors.primary : colors.border,
-                        color: colors.text 
-                      }
+                      styles.iconCircle,
+                      { backgroundColor: colors.success },
                     ]}
-                    value={digit}
-                    onChangeText={(value) => handleOtpChange(value, index)}
-                    onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
-                    keyboardType="numeric"
-                    maxLength={1}
-                    selectTextOnFocus
-                    autoFocus={index === 0}
-                  />
-                ))}
-              </View>
+                  >
+                    <Shield size={32} color="#FFFFFF" />
+                  </View>
+                </View>
 
-              <TouchableOpacity 
-                style={[
-                  styles.verifyButton,
-                  (otp.every(digit => digit !== '') && !loading) && { opacity: 1 }
-                ]} 
-                onPress={handleVerifyOtp}
-                disabled={!otp.every(digit => digit !== '') || loading}>
-                <LinearGradient
-                  colors={otp.every(digit => digit !== '') && !loading ? [colors.success, '#059669'] : [colors.border, colors.textSecondary]}
-                  style={styles.verifyButtonGradient}>
-                  <Text style={[
-                    styles.verifyButtonText,
-                    { color: (otp.every(digit => digit !== '') && !loading) ? '#FFFFFF' : colors.textSecondary }
-                  ]}>
-                    {loading ? 'Verifying...' : 'Verify & Continue'}
+                <Text style={[styles.otpTitle, { color: colors.text }]}>
+                  Enter Verification Code
+                </Text>
+                <Text
+                  style={[styles.otpSubtitle, { color: colors.textSecondary }]}
+                >
+                  We've sent a 6-digit code to{'\n'}
+                  <Text style={[styles.contactText, { color: colors.primary }]}>
+                    {formatContact(contact as string)}
                   </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                </Text>
 
-              <View style={styles.resendContainer}>
-                {canResend ? (
-                  <TouchableOpacity 
-                    style={styles.resendButton} 
-                    onPress={handleResendOtp}
-                    disabled={resending}>
-                    <RotateCcw size={16} color={resending ? colors.textSecondary : colors.primary} />
-                    <Text style={[
-                      styles.resendText, 
-                      { color: resending ? colors.textSecondary : colors.primary }
-                    ]}>
-                      {resending 
-                        ? 'Sending...' 
-                        : emailVerification === 'true' 
-                          ? 'Resend Email Link' 
-                          : 'Resend Code'
-                      }
+                {/* Development mode helper */}
+                {__DEV__ && (
+                  <View
+                    style={[
+                      styles.devHelper,
+                      {
+                        backgroundColor: colors.primary + '20',
+                        borderColor: colors.primary,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.devHelperText, { color: colors.primary }]}
+                    >
+                      💡 Check your phone for the SMS code
                     </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <Text style={[styles.timerText, { color: colors.textSecondary }]}>
-                    Resend code in {timer}s
-                  </Text>
+                  </View>
                 )}
+
+                <View style={styles.otpInputContainer}>
+                  {otp.map((digit, index) => (
+                    <TextInput
+                      key={index}
+                      ref={(ref) => {
+                        if (ref) inputRefs.current[index] = ref;
+                      }}
+                      style={[
+                        styles.otpInput,
+                        {
+                          backgroundColor: colors.background,
+                          borderColor: digit ? colors.primary : colors.border,
+                          color: colors.text,
+                        },
+                      ]}
+                      value={digit}
+                      onChangeText={(value) => handleOtpChange(value, index)}
+                      onKeyPress={({ nativeEvent }) =>
+                        handleKeyPress(nativeEvent.key, index)
+                      }
+                      keyboardType="numeric"
+                      maxLength={1}
+                      selectTextOnFocus
+                      autoFocus={index === 0}
+                    />
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.verifyButton,
+                    otp.every((digit) => digit !== '') &&
+                      !loading && { opacity: 1 },
+                  ]}
+                  onPress={handleVerifyOtp}
+                  disabled={!otp.every((digit) => digit !== '') || loading}
+                >
+                  <LinearGradient
+                    colors={
+                      otp.every((digit) => digit !== '') && !loading
+                        ? [colors.success, '#059669']
+                        : [colors.border, colors.textSecondary]
+                    }
+                    style={styles.verifyButtonGradient}
+                  >
+                    <Text
+                      style={[
+                        styles.verifyButtonText,
+                        {
+                          color:
+                            otp.every((digit) => digit !== '') && !loading
+                              ? '#FFFFFF'
+                              : colors.textSecondary,
+                        },
+                      ]}
+                    >
+                      {loading ? 'Verifying...' : 'Verify & Continue'}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <View style={styles.resendContainer}>
+                  {canResend ? (
+                    <TouchableOpacity
+                      style={styles.resendButton}
+                      onPress={handleResendOtp}
+                      disabled={resending}
+                    >
+                      <RotateCcw
+                        size={16}
+                        color={
+                          resending ? colors.textSecondary : colors.primary
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.resendText,
+                          {
+                            color: resending
+                              ? colors.textSecondary
+                              : colors.primary,
+                          },
+                        ]}
+                      >
+                        {resending ? 'Sending...' : 'Resend Code'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text
+                      style={[
+                        styles.timerText,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      Resend code in {timer}s
+                    </Text>
+                  )}
+                </View>
               </View>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
     </SafeAreaView>
@@ -280,10 +313,15 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+  },
   content: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
   },
   header: {
     flexDirection: 'row',
@@ -341,16 +379,17 @@ const styles = StyleSheet.create({
   },
   otpInputContainer: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
     marginBottom: 32,
+    justifyContent: 'center',
   },
   otpInput: {
-    width: 56,
-    height: 56,
+    width: 48,
+    height: 48,
     borderRadius: 12,
     borderWidth: 2,
     textAlign: 'center',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
   },
   verifyButton: {
