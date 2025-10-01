@@ -1,20 +1,39 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Shield, RotateCcw } from 'lucide-react-native';
 import { useState, useRef, useEffect } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
+import { verifyCode, resendVerificationCode } from '@/lib/phoneAuth';
+import { verifyEmailLink, sendMockEmailVerification } from '@/lib/emailAuth';
+import { ConfirmationResult } from 'firebase/auth';
 
 export default function OTPScreen() {
   const { colors } = useTheme();
-  const { method, contact } = useLocalSearchParams();
+  const { method, contact, verificationId, emailVerification } = useLocalSearchParams();
   const [otp, setOtp] = useState(['', '', '', '']);
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const inputRefs = useRef<TextInput[]>([]);
+  const [currentVerificationId, setCurrentVerificationId] = useState<string | null>(null);
+  const [emailVerificationSent, setEmailVerificationSent] = useState(false);
 
   useEffect(() => {
+    // Handle email verification
+    if (emailVerification === 'true') {
+      setEmailVerificationSent(true);
+      setCanResend(true); // Allow immediate resend for email
+      return;
+    }
+
+    // Read verificationId from params for phone verification
+    if (verificationId && typeof verificationId === 'string') {
+      setCurrentVerificationId(verificationId);
+    }
+
     const interval = setInterval(() => {
       setTimer((prev) => {
         if (prev <= 1) {
@@ -27,7 +46,7 @@ export default function OTPScreen() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [verificationId, emailVerification]);
 
   const handleOtpChange = (value: string, index: number) => {
     if (value.length > 1) return;
@@ -55,19 +74,65 @@ export default function OTPScreen() {
     }
   };
 
-  const handleVerifyOtp = () => {
+  const handleVerifyOtp = async () => {
     const otpCode = otp.join('');
-    if (otpCode.length === 4) {
-      // Simulate OTP verification
+    if (otpCode.length !== 4) {
+      Alert.alert('Error', 'Please enter a complete 4-digit code');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      if (emailVerification === 'true') {
+        // For email verification, we'll use a mock verification for now
+        // In production, this would verify the email link
+        console.log('📧 Verifying email with code:', otpCode);
+        // Simulate email verification
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log('✅ Email verification successful');
+      } else {
+        // Phone verification
+        if (!currentVerificationId) {
+          Alert.alert('Error', 'Verification session expired. Please try again.');
+          router.back();
+          return;
+        }
+        await verifyCode(currentVerificationId, otpCode);
+      }
+      
+      // Success - user is now authenticated
       router.replace('/(tabs)');
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert('Error', error.message || 'Invalid verification code');
     }
   };
 
-  const handleResendOtp = () => {
-    setTimer(30);
-    setCanResend(false);
-    setOtp(['', '', '', '']);
-    inputRefs.current[0]?.focus();
+  const handleResendOtp = async () => {
+    try {
+      setResending(true);
+      
+      if (emailVerification === 'true') {
+        // Resend email verification
+        await sendMockEmailVerification(contact as string);
+        Alert.alert('Success', 'Email verification link sent successfully');
+      } else {
+        // Resend phone verification
+        const { verificationId: newVerificationId } = await resendVerificationCode(contact as string);
+        setCurrentVerificationId(newVerificationId);
+        setTimer(30);
+        setCanResend(false);
+        Alert.alert('Success', 'Verification code sent successfully');
+      }
+      
+      setOtp(['', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to resend verification');
+    } finally {
+      setResending(false);
+    }
   };
 
   const formatContact = (contact: string) => {
@@ -104,11 +169,28 @@ export default function OTPScreen() {
                 </View>
               </View>
 
-              <Text style={[styles.otpTitle, { color: colors.text }]}>Enter Verification Code</Text>
+              <Text style={[styles.otpTitle, { color: colors.text }]}>
+                {emailVerification === 'true' ? 'Enter Email Verification Code' : 'Enter Verification Code'}
+              </Text>
               <Text style={[styles.otpSubtitle, { color: colors.textSecondary }]}>
-                We've sent a 4-digit code to{'\n'}
+                {emailVerification === 'true' 
+                  ? `We've sent a verification link to your email{'\n'}Please check your email and enter the 4-digit code from the link`
+                  : `We've sent a 4-digit code to{'\n'}`
+                }
                 <Text style={[styles.contactText, { color: colors.primary }]}>{formatContact(contact as string)}</Text>
               </Text>
+              
+              {/* Development mode helper */}
+              {__DEV__ && (
+                <View style={[styles.devHelper, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}>
+                  <Text style={[styles.devHelperText, { color: colors.primary }]}>
+                    {emailVerification === 'true' 
+                      ? '📧 Development Mode: Use code "1234" for email verification'
+                      : '💡 Check your phone for the SMS code'
+                    }
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.otpInputContainer}>
                 {otp.map((digit, index) => (
@@ -139,25 +221,40 @@ export default function OTPScreen() {
               <TouchableOpacity 
                 style={[
                   styles.verifyButton,
-                  otp.every(digit => digit !== '') && { opacity: 1 }
+                  (otp.every(digit => digit !== '') && !loading) && { opacity: 1 }
                 ]} 
                 onPress={handleVerifyOtp}
-                disabled={!otp.every(digit => digit !== '')}>
+                disabled={!otp.every(digit => digit !== '') || loading}>
                 <LinearGradient
-                  colors={otp.every(digit => digit !== '') ? [colors.success, '#059669'] : [colors.border, colors.textSecondary]}
+                  colors={otp.every(digit => digit !== '') && !loading ? [colors.success, '#059669'] : [colors.border, colors.textSecondary]}
                   style={styles.verifyButtonGradient}>
                   <Text style={[
                     styles.verifyButtonText,
-                    { color: otp.every(digit => digit !== '') ? '#FFFFFF' : colors.textSecondary }
-                  ]}>Verify & Continue</Text>
+                    { color: (otp.every(digit => digit !== '') && !loading) ? '#FFFFFF' : colors.textSecondary }
+                  ]}>
+                    {loading ? 'Verifying...' : 'Verify & Continue'}
+                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
 
               <View style={styles.resendContainer}>
                 {canResend ? (
-                  <TouchableOpacity style={styles.resendButton} onPress={handleResendOtp}>
-                    <RotateCcw size={16} color={colors.primary} />
-                    <Text style={[styles.resendText, { color: colors.primary }]}>Resend Code</Text>
+                  <TouchableOpacity 
+                    style={styles.resendButton} 
+                    onPress={handleResendOtp}
+                    disabled={resending}>
+                    <RotateCcw size={16} color={resending ? colors.textSecondary : colors.primary} />
+                    <Text style={[
+                      styles.resendText, 
+                      { color: resending ? colors.textSecondary : colors.primary }
+                    ]}>
+                      {resending 
+                        ? 'Sending...' 
+                        : emailVerification === 'true' 
+                          ? 'Resend Email Link' 
+                          : 'Resend Code'
+                      }
+                    </Text>
                   </TouchableOpacity>
                 ) : (
                   <Text style={[styles.timerText, { color: colors.textSecondary }]}>
@@ -288,5 +385,16 @@ const styles = StyleSheet.create({
   },
   timerText: {
     fontSize: 14,
+  },
+  devHelper: {
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  devHelperText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

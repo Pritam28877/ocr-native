@@ -1,29 +1,67 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Smartphone, Mail, Rocket } from 'lucide-react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
+import { sendVerificationCode } from '@/lib/phoneAuth';
+import { sendEmailVerificationLink, sendMockEmailVerification } from '@/lib/emailAuth';
+import RecaptchaContainer from '@/components/RecaptchaContainer';
 
 export default function LoginScreen() {
   const { colors } = useTheme();
   const [loginMethod, setLoginMethod] = useState<'phone' | 'email'>('phone');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('+91 ');
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     const contact = loginMethod === 'phone' ? phoneNumber : email;
-    if (contact.trim()) {
-      router.push({
-        pathname: '/otp',
-        params: { method: loginMethod, contact: contact.trim() }
-      });
+    if (!contact.trim()) {
+      Alert.alert('Error', 'Please enter a valid phone number or email');
+      return;
+    }
+
+    if (loginMethod === 'phone') {
+      try {
+        setLoading(true);
+        const { verificationId } = await sendVerificationCode(contact.trim());
+        
+        // Pass verificationId for verification
+        router.push({
+          pathname: '/otp',
+          params: { 
+            method: loginMethod, 
+            contact: contact.trim(),
+            verificationId
+          }
+        });
+      } catch (error: any) {
+        setLoading(false);
+        Alert.alert('Error', error.message || 'Failed to send verification code');
+      }
+    } else {
+      // Email verification
+      try {
+        setLoading(true);
+        await sendEmailVerificationLink(contact.trim());
+        // Navigate to verify-email handler screen which will complete the flow on link open
+        router.push('/verify-email');
+      } catch (error: any) {
+        setLoading(false);
+        Alert.alert('Error', error.message || 'Failed to send email verification');
+      }
     }
   };
 
   const handleContinueAsGuest = () => {
     router.replace('/(tabs)');
+  };
+
+  const handleBack = () => {
+    // Navigate to onboarding screen
+    router.push('/onboarding');
   };
 
   return (
@@ -38,7 +76,7 @@ export default function LoginScreen() {
           
           <View style={styles.content}>
             <View style={styles.header}>
-              <TouchableOpacity style={styles.backButton}>
+              <TouchableOpacity style={styles.backButton} onPress={handleBack}>
                 <ArrowLeft size={20} color="#FFFFFF" />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>Welcome Back</Text>
@@ -84,7 +122,7 @@ export default function LoginScreen() {
               {loginMethod === 'phone' ? (
                 <TextInput
                   style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                  placeholder="+1 (555) 123-4567"
+                  placeholder="+91 XXXXX XXXXX"
                   placeholderTextColor={colors.textSecondary}
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
@@ -102,12 +140,17 @@ export default function LoginScreen() {
                 />
               )}
 
-              <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+              <TouchableOpacity 
+                style={styles.loginButton} 
+                onPress={handleLogin}
+                disabled={loading}>
                 <LinearGradient
-                  colors={['#06B6D4', '#0891B2']}
+                  colors={loading ? ['#9CA3AF', '#6B7280'] : ['#06B6D4', '#0891B2']}
                   style={styles.loginButtonGradient}>
                   <Rocket size={16} color="#FFFFFF" />
-                  <Text style={styles.loginButtonText}>Login</Text>
+                  <Text style={styles.loginButtonText}>
+                    {loading ? 'Sending...' : 'Login'}
+                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
 
@@ -117,6 +160,7 @@ export default function LoginScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+        <RecaptchaContainer />
       </LinearGradient>
     </SafeAreaView>
   );

@@ -1,30 +1,68 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { X, Minus, Plus, Percent, DollarSign, ChartBar as BarChart3, Eye } from 'lucide-react-native';
-import { useState } from 'react';
-import { router } from 'expo-router';
+import { X, Minus, Plus, Percent, IndianRupee } from 'lucide-react-native';
+import { useMemo, useState } from 'react';
+import { useQuoteStore } from '@/stores/useQuoteStore';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ItemEditScreen() {
+  const params = useLocalSearchParams<{ name?: string; quantity?: string; price?: string; gst?: string }>();
   const [visible, setVisible] = useState(true);
-  const [quantity, setQuantity] = useState(2);
-  const [price, setPrice] = useState('0.00');
-  const [gst, setGst] = useState(18);
+  const initialQuantity = useMemo(() => {
+    const q = Number(params.quantity);
+    return Number.isFinite(q) && q > 0 ? q : 1;
+  }, [params.quantity]);
+  const initialPrice = useMemo(() => {
+    const p = Number(params.price);
+    return Number.isFinite(p) && p >= 0 ? p.toFixed(2) : '0.00';
+  }, [params.price]);
+  const initialGst = useMemo(() => {
+    const g = Number(params.gst);
+    return Number.isFinite(g) && g >= 0 ? g : 18;
+  }, [params.gst]);
+
+  const [itemName, setItemName] = useState(params.name || 'New Item');
+  const [quantity, setQuantity] = useState(initialQuantity);
+  const [price, setPrice] = useState('0');
+  const [gst, setGst] = useState(initialGst);
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
   const [discountValue, setDiscountValue] = useState('0');
 
-  const itemTotal = quantity * parseFloat(price);
-  const gstAmount = itemTotal * (gst / 100);
-  const finalTotal = itemTotal + gstAmount;
+  // Calculate discount amount
+  const discountAmount = useMemo(() => {
+    const discount = parseFloat(discountValue) || 0;
+    if (discountType === 'percentage') {
+      return (quantity * parseFloat(price) * discount) / 100;
+    } else {
+      return discount;
+    }
+  }, [discountValue, discountType, quantity, price]);
+
+  const itemTotal = quantity * parseFloat(price) - discountAmount;
 
   const handleClose = () => {
     setVisible(false);
     router.back();
   };
 
-  const handlePreview = () => {
-    handleClose();
+  const handleSave = () => {
+    // Save the updated item data with discount applied
+    const updatedItem = {
+      name: itemName,
+      quantity,
+      price: parseFloat(price),
+      gst,
+      total: itemTotal // This now includes the discount
+    };
+    // Persist in global quote store so quotation screen reflects immediately
+    const upsertEditedItem = useQuoteStore.getState().upsertEditedItem;
+    upsertEditedItem(updatedItem);
+    
+    // Navigate back to quotation
+    router.back();
   };
+
 
   if (!visible) return null;
 
@@ -32,188 +70,74 @@ export default function ItemEditScreen() {
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
+          <View style={styles.placeholder} />
           <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
             <X size={24} color="#374151" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Item Details</Text>
-          <View style={styles.placeholder} />
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Quantity Controls */}
-          <View style={styles.quantitySection}>
-            <Text style={styles.sectionLabel}>Quantity:</Text>
-            <View style={styles.quantityControls}>
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => setQuantity(Math.max(1, quantity - 1))}>
-                <Minus size={16} color="#6B7280" />
-              </TouchableOpacity>
-              <Text style={styles.quantityValue}>{quantity}</Text>
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={() => setQuantity(quantity + 1)}>
-                <Plus size={16} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.quantityTotal}>${(quantity * parseFloat(price)).toFixed(2)}</Text>
-            <Text style={styles.quantityGst}>+GST: ${((quantity * parseFloat(price)) * (gst / 100)).toFixed(2)}</Text>
-          </View>
-
           {/* New Item Card */}
           <View style={styles.itemCard}>
             <LinearGradient
               colors={['#8B5CF6', '#A855F7']}
               style={styles.itemHeader}>
-              <Text style={styles.itemTitle}>New Item</Text>
-              <View style={styles.itemActions}>
-                <TouchableOpacity style={styles.itemAction}>
-                  <Percent size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.itemAction}>
-                  <X size={16} color="#FFFFFF" />
-                </TouchableOpacity>
+              <View style={styles.itemTitleContainer}>
+                <Text style={styles.itemTitle}>{itemName}</Text>
+                <Text style={styles.itemSubtitle}>Hardware Product</Text>
               </View>
+               {/* Action buttons removed */}
             </LinearGradient>
 
             <View style={styles.itemContent}>
+              <View style={styles.itemNameSection}>
+                <Text style={styles.inputLabel}>Product Name:</Text>
+                <TextInput
+                  style={styles.itemNameInput}
+                  value={itemName}
+                  onChangeText={setItemName}
+                  placeholder="Enter product name"
+                  multiline
+                />
+              </View>
+              
               <View style={styles.itemCode}>
-                <Text style={styles.itemCodeText}>NEW-001 • General</Text>
+                <Text style={styles.itemCodeText}>{itemName}</Text>
               </View>
 
-              <View style={styles.priceRow}>
-                <View style={styles.priceInput}>
-                  <Text style={styles.inputLabel}>Price:</Text>
-                  <TextInput
-                    style={styles.priceField}
-                    value={`$${price}`}
-                    onChangeText={(text) => setPrice(text.replace('$', ''))}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-                <View style={styles.gstInput}>
-                  <Text style={styles.inputLabel}>GST:</Text>
-                  <Text style={styles.gstValue}>{gst}%</Text>
-                </View>
-              </View>
+               {/* Price input removed for Product List */}
 
-              <View style={styles.quantityRow}>
-                <Text style={styles.quantityLabel}>Quantity:</Text>
-                <View style={styles.quantityMini}>
+              {/* Quantity Controls */}
+              <View style={styles.quantitySection}>
+                <Text style={styles.sectionLabel}>Quantity:</Text>
+                <View style={styles.quantityControls}>
                   <TouchableOpacity
-                    style={styles.quantityMiniButton}
+                    style={styles.quantityButton}
                     onPress={() => setQuantity(Math.max(1, quantity - 1))}>
-                    <Minus size={12} color="#6B7280" />
+                    <Minus size={16} color="#6B7280" />
                   </TouchableOpacity>
-                  <Text style={styles.quantityMiniValue}>{quantity}</Text>
+                  <Text style={styles.quantityValue}>{quantity}</Text>
                   <TouchableOpacity
-                    style={styles.quantityMiniButton}
+                    style={styles.quantityButton}
                     onPress={() => setQuantity(quantity + 1)}>
-                    <Plus size={12} color="#6B7280" />
+                    <Plus size={16} color="#6B7280" />
                   </TouchableOpacity>
                 </View>
-                <View style={styles.itemTotal}>
-                  <Text style={styles.itemTotalValue}>${itemTotal.toFixed(2)}</Text>
-                  <Text style={styles.itemTotalGst}>+GST: ${gstAmount.toFixed(2)}</Text>
-                </View>
+                 <Text style={styles.quantityTotal}>Quantity: {quantity}</Text>
               </View>
             </View>
           </View>
 
-          {/* Discount Section */}
-          <View style={styles.discountCard}>
-            <View style={styles.discountHeader}>
-              <View style={styles.discountIcon}>
-                <Percent size={16} color="#F59E0B" />
-              </View>
-              <Text style={styles.discountTitle}>Apply Discount</Text>
-            </View>
+          {/* Discount section removed for Product List */}
 
-            <View style={styles.discountTypes}>
-              <TouchableOpacity
-                style={[
-                  styles.discountTypeButton,
-                  discountType === 'percentage' && styles.discountTypeActive
-                ]}
-                onPress={() => setDiscountType('percentage')}>
-                <Text style={[
-                  styles.discountTypeText,
-                  discountType === 'percentage' && styles.discountTypeTextActive
-                ]}>Percentage</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.discountTypeButton,
-                  discountType === 'fixed' && styles.discountTypeActive
-                ]}
-                onPress={() => setDiscountType('fixed')}>
-                <Text style={[
-                  styles.discountTypeText,
-                  discountType === 'fixed' && styles.discountTypeTextActive
-                ]}>Fixed Amount</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Tax settings removed; GST applied at quote level */}
 
-            <View style={styles.discountInputRow}>
-              <TextInput
-                style={styles.discountInput}
-                value={discountValue}
-                onChangeText={setDiscountValue}
-                keyboardType="decimal-pad"
-                placeholder="0"
-              />
-              <TouchableOpacity style={styles.clearButton}>
-                <Text style={styles.clearButtonText}>Clear</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Tax Settings */}
-          <View style={styles.taxCard}>
-            <View style={styles.taxHeader}>
-              <View style={styles.taxIcon}>
-                <BarChart3 size={16} color="#10B981" />
-              </View>
-              <Text style={styles.taxTitle}>Tax Settings</Text>
-            </View>
-            <View style={styles.taxRow}>
-              <Text style={styles.taxLabel}>Default GST Rate:</Text>
-              <View style={styles.taxValue}>
-                <Text style={styles.taxValueText}>{gst}</Text>
-                <Text style={styles.taxValueUnit}>%</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Quote Summary */}
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryHeader}>
-              <View style={styles.summaryIcon}>
-                <DollarSign size={16} color="#06B6D4" />
-              </View>
-              <Text style={styles.summaryTitle}>Quote Summary</Text>
-            </View>
-            <View style={styles.summaryContent}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal:</Text>
-                <Text style={styles.summaryValue}>${12977.20}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>GST:</Text>
-                <Text style={styles.summaryValue}>${2335.90}</Text>
-              </View>
-              <View style={[styles.summaryRow, styles.summaryTotal]}>
-                <Text style={styles.summaryTotalLabel}>Total:</Text>
-                <Text style={styles.summaryTotalValue}>${15313.10}</Text>
-              </View>
-            </View>
-          </View>
+          {/* Summary removed for Product List */}
         </ScrollView>
 
         <View style={styles.bottomAction}>
-          <TouchableOpacity style={styles.previewButton} onPress={handlePreview}>
-            <Eye size={20} color="#FFFFFF" />
-            <Text style={styles.previewButtonText}>Preview Quote</Text>
+          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+            <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -244,10 +168,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#111827',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 4,
+    textAlign: 'center',
   },
   placeholder: {
     width: 40,
@@ -323,10 +260,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  itemTitleContainer: {
+    flex: 1,
+  },
   itemTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  itemSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   itemActions: {
     flexDirection: 'row',
@@ -342,6 +287,19 @@ const styles = StyleSheet.create({
   },
   itemContent: {
     padding: 16,
+  },
+  itemNameSection: {
+    marginBottom: 16,
+  },
+  itemNameInput: {
+    height: 50,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   itemCode: {
     marginBottom: 16,
@@ -376,10 +334,20 @@ const styles = StyleSheet.create({
   gstInput: {
     alignItems: 'flex-end',
   },
-  gstValue: {
+  gstInputField: {
+    height: 40,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
     fontSize: 16,
-    fontWeight: '600',
     color: '#EF4444',
+    fontWeight: '600',
+    textAlign: 'center',
+    minWidth: 60,
+  },
+  gstUnit: {
+    fontSize: 14,
+    color: '#6B7280',
     marginTop: 8,
   },
   quantityRow: {
@@ -623,16 +591,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
   },
-  previewButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  saveButton: {
     backgroundColor: '#10B981',
     borderRadius: 12,
     paddingVertical: 16,
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  previewButtonText: {
+  saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',

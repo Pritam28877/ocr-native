@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
+import { AuthProvider } from '@/contexts/AuthContext';
 import { useUIStore } from '@/stores/useUIStore';
 import * as NavigationBar from 'expo-navigation-bar';
 
@@ -34,21 +35,24 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
-      <>
-        <RootStatusBar />
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-          <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="otp" options={{ headerShown: false }} />
-          <Stack.Screen name="camera" options={{ headerShown: false }} />
-          <Stack.Screen name="processing" options={{ headerShown: false }} />
-          <Stack.Screen name="quotation" options={{ headerShown: false }} />
-          <Stack.Screen name="item-edit" options={{ headerShown: false, presentation: 'modal' }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-      </>
+      <AuthProvider>
+        <>
+          <RootStatusBar />
+          <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            <Stack.Screen name="login" options={{ headerShown: false }} />
+            <Stack.Screen name="otp" options={{ headerShown: false }} />
+            <Stack.Screen name="verify-email" options={{ headerShown: false }} />
+            <Stack.Screen name="camera" options={{ headerShown: false }} />
+            <Stack.Screen name="processing" options={{ headerShown: false }} />
+            <Stack.Screen name="quotation" options={{ headerShown: false }} />
+            <Stack.Screen name="item-edit" options={{ headerShown: false, presentation: 'modal' }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+        </>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

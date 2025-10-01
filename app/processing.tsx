@@ -1,33 +1,53 @@
-import { View, Text, StyleSheet, Animated, Image } from 'react-native';
+import { View, Text, StyleSheet, Animated, Image, Alert } from 'react-native';
 import { Saturate, Contrast, Brightness } from 'react-native-color-matrix-image-filters';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Bookmark, User, Sparkles, FileText } from 'lucide-react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+// Using the fixed API format directly for downstream UI
+import { uploadImageToOcr } from '@/lib/ocrService';
+import { useQuoteStore } from '@/stores/useQuoteStore';
 
 export default function ProcessingScreen() {
   const { imageUri, ocrPreview } = useLocalSearchParams<{ imageUri?: string; ocrPreview?: string }>();
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [processingData, setProcessingData] = useState<any | null>(null);
+  const setProducts = useQuoteStore((s) => s.setProducts);
 
   useEffect(() => {
+    // Process the image with real API only
+    const processImage = async () => {
+      if (!imageUri) return;
+      try {
+        console.log('Calling real OCR API...');
+        const apiRes = await uploadImageToOcr(String(imageUri));
+        console.log('API Response:', JSON.stringify(apiRes, null, 2));
+        
+        // Pass through the fixed API format products as-is
+        const products = (apiRes as any)?.data?.products || [];
+        console.log('Products found:', products.length);
+        // Save products to global store for downstream screens
+        setProducts(products);
+        // Keep a minimal envelope for navigation, matching expected param usage
+        setProcessingData({ parsed_data: { products }, image_path: String(imageUri), extracted_text: '' });
+      } catch (error) {
+        console.error('Error processing image:', error);
+        // Show error message instead of fallback
+        Alert.alert('Processing Error', `Failed to process the image: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+
+    processImage();
+
     // Animate progress bar
     Animated.timing(progressAnim, {
       toValue: 1,
       duration: 3000,
       useNativeDriver: false,
-    }).start(() => {
-      // Navigate to quotation after processing
-      setTimeout(() => {
-        if (imageUri) {
-          router.push({ pathname: '/quotation', params: { imageUri: String(imageUri) } });
-        } else {
-          router.push('/quotation');
-        }
-      }, 1000);
-    });
+    }).start();
 
     // Animate pulse effect
     const pulseAnimation = Animated.loop(
@@ -50,6 +70,26 @@ export default function ProcessingScreen() {
       pulseAnimation.stop();
     };
   }, []);
+
+  // Navigate when processing data is ready
+  useEffect(() => {
+    if (processingData) {
+      console.log('Processing data ready, navigating to quotation...');
+      setTimeout(() => {
+        if (imageUri) {
+          router.push({ 
+            pathname: '/quotation', 
+            params: { 
+              imageUri: String(imageUri),
+              processingData: JSON.stringify(processingData)
+            } 
+          });
+        } else {
+          router.push('/quotation');
+        }
+      }, 1000);
+    }
+  }, [processingData, imageUri]);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],

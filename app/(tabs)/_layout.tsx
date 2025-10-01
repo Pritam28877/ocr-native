@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router/tabs';
-import { Chrome as Home, FileText, Plus, User, Bell, Menu, Sun, Moon } from 'lucide-react-native';
+import { Chrome as Home, FileText, Package, User, Bell, Menu, Sun, Moon } from 'lucide-react-native';
 import { StyleSheet, Platform, TouchableOpacity, View, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -92,11 +92,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="create-quote"
+        name="catalog"
         options={{
-          title: 'Create Quote',
+          title: 'Catalog',
           tabBarIcon: ({ size, color }) => (
-            <Plus size={size} color={color} />
+            <Package size={size} color={color} />
           ),
         }}
       />

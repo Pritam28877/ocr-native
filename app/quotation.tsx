@@ -1,10 +1,14 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Plus, Bookmark, User, CreditCard as Edit, Download, Share } from 'lucide-react-native';
+import { ArrowLeft, Plus, Edit3 as Edit, User, Download, Share as ShareIcon } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as MediaLibrary from 'expo-media-library';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuoteStore } from '@/stores/useQuoteStore';
+import { OCR_API_URL, OCR_API_TOKEN } from '@/lib/env';
+// Display products using the fixed API format
 
 interface QuotationItem {
   id: string;
@@ -16,39 +20,40 @@ interface QuotationItem {
   total: number;
 }
 
-const sampleItems: QuotationItem[] = [
-  {
-    id: '1',
-    name: 'LED Bulb 9W',
-    description: 'LED-9W-001',
-    quantity: 97,
-    price: 100.00,
-    gst: 18,
-    total: 11446.00,
-  },
-  {
-    id: '2',
-    name: 'MCB 16A Single Pole',
-    description: 'MCB-16A-SP',
-    quantity: 5,
-    price: 125.50,
-    gst: 18,
-    total: 740.45,
-  },
-  {
-    id: '3',
-    name: 'FR PVC Cable',
-    description: 'CABLE-001',
-    quantity: 10,
-    price: 85.00,
-    gst: 18,
-    total: 1003.00,
-  },
-];
 
-export default function QuotationScreen() {
-  const { imageUri } = useLocalSearchParams<{ imageUri?: string }>();
+export default function ProductListScreen() {
+  const { imageUri, processingData, updatedItem } = useLocalSearchParams<{ 
+    imageUri?: string; 
+    processingData?: string; 
+    updatedItem?: string;
+  }>();
   const [hasMediaPerm, setHasMediaPerm] = useState<boolean>(false);
+  const [parsedData, setParsedData] = useState<any | null>(null);
+  const ocrProducts = useQuoteStore((s) => s.products);
+  const editedItems = useQuoteStore((s) => s.editedItems);
+  const setProducts = useQuoteStore((s) => s.setProducts);
+
+  const openEditForProduct = (product: any) => {
+    // Check if this product has been edited before
+    const editedItem = editedItems[product.itemName];
+    
+    // Attempt to extract a numeric quantity if present, fallback to 1
+    const qtyMatch = String(product.itemQuantity ?? '').match(/\d+/);
+    const qty = qtyMatch ? qtyMatch[0] : '1';
+    
+    console.log('Opening edit for product:', product.itemName);
+    router.push({
+      pathname: '/item-edit',
+      params: {
+        name: editedItem ? editedItem.name : product.itemName,
+        quantity: editedItem ? String(editedItem.quantity) : qty,
+        price: editedItem ? String(editedItem.price) : '0',
+        gst: editedItem ? String(editedItem.gst) : '18'
+      }
+    });
+  };
+
+  // Using flat items from fixed API format
 
   useEffect(() => {
     (async () => {
@@ -56,6 +61,106 @@ export default function QuotationScreen() {
       setHasMediaPerm(status === 'granted');
     })();
   }, []);
+
+  useEffect(() => {
+    if (processingData) {
+      try {
+        const data = JSON.parse(processingData) as any;
+        console.log('Quotation received data:', JSON.stringify(data, null, 2));
+        setParsedData(data);
+        const products = data?.parsed_data?.products || [];
+        setProducts(products);
+      } catch (error) {
+        console.error('Error parsing processing data:', error);
+        setProducts([]);
+      }
+    }
+  }, [processingData, setProducts]);
+
+  // Memo list of products to display from store
+  const displayProducts = useMemo(() => ocrProducts as any[], [ocrProducts]);
+  // Names present from OCR (parents and subs) for fast lookup
+  const knownOcrNames = useMemo(() => {
+    const names = new Set<string>();
+    (displayProducts || []).forEach((p) => names.add(p.itemName));
+    return names;
+  }, [displayProducts]);
+  // Edited items that are not part of OCR products (user-added standalone items)
+  const standaloneEditedItems = useMemo(() => {
+    return Object.values(editedItems || {}).filter((it) => !knownOcrNames.has(it.name));
+  }, [editedItems, knownOcrNames]);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmitToBackend = async () => {
+    try {
+      setIsSubmitting(true);
+
+      // Build request body for /api/ocr/process-data from current products and edits
+      const originalData = (displayProducts || []).map((product) => {
+        const editedItem = editedItems[product.itemName];
+        const fallbackQty = typeof product.itemQuantity === 'string'
+          ? Number((String(product.itemQuantity).match(/\d+/) || ['0'])[0])
+          : Number(product.itemQuantity || 0);
+        const quantity = editedItem ? Number(editedItem.quantity) : fallbackQty;
+        return {
+          itemNumber: product.itemNumber,
+          itemId: product.itemId ?? null,
+          itemName: product.itemName,
+          itemDescription: product.itemDescription ?? null,
+          itemQuantity: Number.isFinite(quantity) ? quantity : 0,
+        };
+      });
+
+      const processDataUrl = new URL('/api/ocr/process-data', OCR_API_URL).toString();
+      const res = await fetch(processDataUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OCR_API_TOKEN}` },
+        body: JSON.stringify({ data: originalData }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Process-data API error ${res.status}: ${text}`);
+      }
+      const matchResult = await res.json();
+      console.log('Match result:', JSON.stringify(matchResult, null, 2));
+
+      router.push({
+        pathname: '/final-quotation',
+        params: {
+          matchData: JSON.stringify(matchResult),
+          originalData: JSON.stringify(originalData),
+        }
+      });
+    } catch (error) {
+      console.error('Error preparing final quotation:', error);
+      Alert.alert('Error', 'Failed to prepare final quotation');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSharePdf = async () => {
+    try {
+      // Generate PDF content (placeholder - you'll need to implement actual PDF generation)
+      const pdfContent = generateQuotationPdf();
+      
+      await Share.share({
+        message: 'Quotation PDF',
+        title: 'Quotation',
+        url: pdfContent, // This would be the actual PDF file path
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to share PDF.');
+    }
+  };
+
+  const generateQuotationPdf = () => {
+    // Placeholder for PDF generation
+    // In a real implementation, you'd use a library like react-native-pdf-lib
+    // or expo-print to generate the actual PDF
+    return 'PDF content placeholder';
+  };
 
   const handleDownloadOcrImage = async () => {
     try {
@@ -79,17 +184,25 @@ export default function QuotationScreen() {
       Alert.alert('Error', 'Failed to save image.');
     }
   };
-  const subtotal = sampleItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-  const gstAmount = sampleItems.reduce((sum, item) => sum + (item.quantity * item.price * item.gst / 100), 0);
-  const grandTotal = subtotal + gstAmount;
+  // No pricing calculations needed for Product List
 
   const handleEditItem = (item: QuotationItem) => {
-    router.push(`/item-edit?id=${item.id}`);
+    router.push({
+      pathname: '/item-edit',
+      params: {
+        name: item.name,
+        quantity: String(item.quantity),
+        price: '0',
+        gst: String(item.gst),
+      }
+    });
   };
 
   const handleAddItem = () => {
     router.push('/item-edit');
   };
+
+  // GST removed at quote level as well
 
   return (
     <SafeAreaView style={styles.container}>
@@ -100,16 +213,16 @@ export default function QuotationScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <ArrowLeft size={20} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Quotation Items</Text>
+          <Text style={styles.headerTitle}>Product List</Text>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.headerAction}>
+            <TouchableOpacity style={styles.headerAction} onPress={() => router.push('/(tabs)')}>
               <Plus size={18} color="#FFFFFF" />
               <Text style={styles.headerActionText}>New Quote</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerAction}>
+            {/* <TouchableOpacity style={styles.headerAction}>
               <Bookmark size={18} color="#FFFFFF" />
               <Text style={styles.headerActionText}>Saved</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
             <TouchableOpacity style={styles.headerAction}>
               <User size={18} color="#FFFFFF" />
             </TouchableOpacity>
@@ -122,78 +235,101 @@ export default function QuotationScreen() {
           <View style={styles.tableHeader}>
             <Text style={[styles.tableHeaderText, styles.itemColumn]}>Item</Text>
             <Text style={[styles.tableHeaderText, styles.qtyColumn]}>Qty</Text>
-            <Text style={[styles.tableHeaderText, styles.priceColumn]}>Price</Text>
-            <Text style={[styles.tableHeaderText, styles.gstColumn]}>GST</Text>
-            <Text style={[styles.tableHeaderText, styles.totalColumn]}>Total</Text>
             <View style={styles.editColumn} />
           </View>
 
-          {sampleItems.map((item, index) => (
-            <TouchableOpacity
-              key={item.id}
-              style={[styles.tableRow, index === sampleItems.length - 1 && styles.lastRow]}
-              onPress={() => handleEditItem(item)}>
-              <View style={styles.itemColumn}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemDescription}>{item.description}</Text>
-              </View>
-              <View style={styles.qtyColumn}>
-                <Text style={styles.tableText}>{item.quantity}</Text>
-              </View>
-              <View style={styles.priceColumn}>
-                <Text style={styles.tableText}>${item.price.toFixed(2)}</Text>
-              </View>
-              <View style={styles.gstColumn}>
-                <Text style={styles.tableText}>{item.gst}%</Text>
-              </View>
-              <View style={styles.totalColumn}>
-                <Text style={styles.totalText}>${item.total.toFixed(2)}</Text>
-              </View>
-              <TouchableOpacity style={styles.editColumn} onPress={() => handleEditItem(item)}>
-                <Edit size={16} color="#8B5CF6" />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
+          {displayProducts.length > 0 ? (
+            displayProducts.map((product, index) => {
+              // Check if this product has been edited
+              const editedItem = editedItems[product.itemName];
 
+              // No sub-items aggregation; rely on edited or flat total_quantity
+
+              // No price or total display needed for Product List
+              
+              return (
+                <View key={String(product.itemNumber)}>
+                  <View style={[styles.tableRow, index === displayProducts.length - 1 && styles.lastRow]}>
+                    <View style={styles.itemColumn}>
+                      <Text style={styles.itemName}>
+                        {product.itemId ? `${product.itemId} ${product.itemName}` : product.itemName}
+                      </Text>
+                      <Text style={styles.itemDescription}>Item #{product.itemNumber}</Text>
+                      {(() => {
+                        const desc = product.itemDescription || '';
+                        return desc ? (<Text style={styles.itemDescription}>{desc}</Text>) : null;
+                      })()}
+                    </View>
+                    <View style={styles.qtyColumn}>
+                      <Text style={styles.tableText}>
+                        {editedItem ? String(editedItem.quantity) : String(product.itemQuantity)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity style={styles.editColumn} onPress={() => openEditForProduct(product)}>
+                      <Edit size={16} color="#8B5CF6" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No products found</Text>
+              <Text style={styles.emptyStateSubtext}>Upload an image to extract hardware products</Text>
+            </View>
+          )}
+
+          {/* Standalone user-added items */}
+          {standaloneEditedItems.length > 0 && (
+            standaloneEditedItems.map((it, idx) => (
+              <View key={`manual-${idx}`} style={styles.tableRow}>
+                <View style={styles.itemColumn}>
+                  <Text style={styles.itemName}>{it.name}</Text>
+                  <Text style={styles.itemDescription}>Custom Item</Text>
+                </View>
+                <View style={styles.qtyColumn}>
+                  <Text style={styles.tableText}>{String(it.quantity)}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.editColumn}
+                  onPress={() => handleEditItem({ id: '', name: it.name, description: '', quantity: it.quantity, price: 0, gst: 0, total: 0 })}
+                >
+                  <Edit size={16} color="#8B5CF6" />
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
           <TouchableOpacity style={styles.addItemButton} onPress={handleAddItem}>
             <Plus size={20} color="#8B5CF6" />
             <Text style={styles.addItemText}>Add Item</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.summaryContainer}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal:</Text>
-            <Text style={styles.summaryValue}>${subtotal.toFixed(2)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>GST:</Text>
-            <Text style={styles.summaryValue}>${gstAmount.toFixed(2)}</Text>
-          </View>
-          <View style={[styles.summaryRow, styles.grandTotalRow]}>
-            <Text style={styles.grandTotalLabel}>Grand Total:</Text>
-            <Text style={styles.grandTotalValue}>${grandTotal.toFixed(2)}</Text>
-          </View>
-        </View>
-
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.reviewButton}>
-            <Text style={styles.reviewButtonText}>Review & Edit Quote</Text>
+          <TouchableOpacity 
+            style={[styles.reviewButton, isSubmitting && styles.submittingButton]} 
+            onPress={handleSubmitToBackend}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.reviewButtonText}>
+              {isSubmitting ? 'Submitting...' : 'Submit'}
+            </Text>
           </TouchableOpacity>
           
           <View style={styles.bottomButtons}>
-            <TouchableOpacity style={styles.pdfButton}>
-              <Download size={18} color="#FFFFFF" />
-              <Text style={styles.pdfButtonText}>Save PDF</Text>
+            <TouchableOpacity style={styles.pdfButton} onPress={handleSharePdf}>
+              <ShareIcon size={18} color="#FFFFFF" />
+              <Text style={styles.pdfButtonText}>Share PDF</Text>
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.whatsappButton} onPress={handleDownloadOcrImage}>
-              <Share size={18} color="#FFFFFF" />
+              <ShareIcon size={18} color="#FFFFFF" />
               <Text style={styles.whatsappButtonText}>Download Image</Text>
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
+      <Toast />
     </SafeAreaView>
   );
 }
@@ -248,7 +384,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   tableContainer: {
     backgroundColor: '#FFFFFF',
@@ -275,6 +411,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6B7280',
     textTransform: 'uppercase',
+    textAlign: 'left',
   },
   tableRow: {
     flexDirection: 'row',
@@ -296,7 +433,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   priceColumn: {
-    flex: 1.5,
+    flex: 1.2,
     alignItems: 'center',
   },
   gstColumn: {
@@ -304,16 +441,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   totalColumn: {
-    flex: 1.5,
+    flex: 1.8,
     alignItems: 'flex-end',
   },
   editColumn: {
-    width: 32,
+    width: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
   itemName: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#111827',
     marginBottom: 2,
@@ -323,13 +460,15 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   tableText: {
-    fontSize: 14,
+    fontSize: 10,
     color: '#374151',
+    includeFontPadding: false,
   },
   totalText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#111827',
+    includeFontPadding: false,
   },
   addItemButton: {
     flexDirection: 'row',
@@ -399,6 +538,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
+  submittingButton: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.7,
+  },
   reviewButtonText: {
     fontSize: 16,
     fontWeight: '600',
@@ -437,5 +580,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  subQuantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  subQuantityText: {
+    fontSize: 12,
+    color: '#6B7280',
+    includeFontPadding: false,
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
   },
 });

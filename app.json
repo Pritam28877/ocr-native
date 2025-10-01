@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "expo-nativewind",
-    "slug": "expo-nativewind",
+    "name": "quote-ai",
+    "slug": "quote-ai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.exponativewind"
+      "bundleIdentifier": "com.qi.ocr"
     },
     "web": {
       "bundler": "metro",
@@ -20,14 +20,15 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-web-browser",
       [
-        "expo-navigation-bar",
+        "@react-native-firebase/app",
         {
-          "backgroundColor": "#000000",
-          "buttonStyle": "light",
-          "behavior": "inset-swipe",
-          "visibility": "visible"
+          "android": {
+            "googleServicesFile": "./google-services.json"
+          },
+          "ios": {
+            "googleServicesFile": "./GoogleService-Info.plist"
+          }
         }
       ]
     ],
@@ -35,7 +36,19 @@
       "typedRoutes": true
     },
     "android": {
-      "package": "com.anonymous.exponativewind"
+      "package": "com.qi.ocr"
+    },
+    "owner": "appnext",
+    "extra": {
+      "eas": {
+        "projectId": "c6d8b817-5552-46a7-bf6d-14581e41853f"
+      },
+      "EXPO_PUBLIC_OCR_API_URL": "https://ocr-329174454207.asia-south1.run.app/api/ocr/process",
+      "EXPO_PUBLIC_OCR_API_TOKEN": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjA1NTc3MjZmYWIxMjMxZmEyZGNjNTcyMWExMDgzZGE2ODBjNGE3M2YiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vb2NlYW5pYy1kZXB0aC00NzM2MTUtdjMiLCJhdWQiOiJvY2VhbmljLWRlcHRoLTQ3MzYxNS12MyIsImF1dGhfdGltZSI6MTc1OTI1NzgyMiwidXNlcl9pZCI6Ijl1czFlOTJhU09UVTBRV0hWckt4aHdncWxQZzEiLCJzdWIiOiI5dXMxZTkyYVNPVFUwUVdIVnJLeGh3Z3FsUGcxIiwiaWF0IjoxNzU5MjU3ODIyLCJleHAiOjE3NTkyNjE0MjIsInBob25lX251bWJlciI6Iis5MTc1MTczMjMzMjAiLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7InBob25lIjpbIis5MTc1MTczMjMzMjAiXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwaG9uZSJ9fQ.Xh9fY2q0Kla67BNZpFPAbjXdHiMi2wuXQTTNNiztipjB_yPMfJG9mGmI9gSksXp8G4h-ij_uIO4DrqGbecyd5c_5X6eaJUsj2VPrhQBaCKq_Rqf2QInfELIa3ceg6SHRsGdJkK__gUB0SCJE9N5TuyTchndgyCRbugY-xNxEs2fMx0DLclz2u1s_T5vsiE0a3TgGTbP2IDVqWhVve_YcbUYKPC2PwxEKrcoVSGBF7LUzZR3DG2YTzgutHUdyRmOhti9EgAnchiZRMSmfjdD8o0DoU3gaqrm3g3FBgUWdclJ2uGWW2rI6gXK7rnU8d0j-ANK3Ry9Rm-QF6dMtoIbZZA"
+    },
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/c6d8b817-5552-46a7-bf6d-14581e41853f"
     }
   }
 }
