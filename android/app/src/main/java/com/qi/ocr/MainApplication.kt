@@ -1,4 +1,4 @@
-package com.anonymous.boltexponativewind
+package com.qi.ocr
 
 import android.app.Application
 import android.content.res.Configuration

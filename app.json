@@ -36,7 +36,8 @@
       "typedRoutes": true
     },
     "android": {
-      "package": "com.qi.ocr"
+      "package": "com.qi.ocr",
+      "googleServicesFile": "./google-services.json"
     },
     "owner": "appnext",
     "extra": {

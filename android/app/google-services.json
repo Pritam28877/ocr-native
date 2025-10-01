@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "779116345230",
+    "project_id": "encoded-joy-472514-n7",
+    "storage_bucket": "encoded-joy-472514-n7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:779116345230:android:35af16ae21fe61236416df",
+        "android_client_info": {
+          "package_name": "com.qi.ocr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB9YZUNkp-k7b6yubU_1MR4XRQktDOt1nA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
