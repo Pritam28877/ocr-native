@@ -1,60 +1,158 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Upload, ArrowRight } from 'lucide-react-native';
+import { Camera, Image, ArrowRight } from 'lucide-react-native';
 import { router } from 'expo-router';
-import Navbar from '@/components/Navbar';
 import { useTheme } from '@/contexts/ThemeContext';
-import ImageUploadModal from '@/components/ImageUploadModal';
 import { useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
-  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleUploadFile = () => {
-    setShowUploadModal(true);
+  const requestPermissions = async () => {
+    const { status: cameraStatus } =
+      await ImagePicker.requestCameraPermissionsAsync();
+    const { status: mediaStatus } =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (cameraStatus !== 'granted' || mediaStatus !== 'granted') {
+      Alert.alert(
+        'Permissions Required',
+        'Camera and photo library access are required to upload images.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    return true;
   };
 
-  const handleImageSelected = (imageUri: string) => {
-    // Navigate to processing screen with the selected image
-    router.push({ 
-      pathname: '/processing', 
-      params: { imageUri } 
-    });
+  const handleCameraCapture = async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    try {
+      setLoading(true);
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false, // Don't crop image
+        quality: 0.8,
+        aspect: undefined,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        router.push({
+          pathname: '/processing',
+          params: { imageUri: result.assets[0].uri },
+        });
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to capture image');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGallerySelect = async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    try {
+      setLoading(true);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false, // Don't crop image
+        quality: 0.8,
+        aspect: undefined,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        router.push({
+          pathname: '/processing',
+          params: { imageUri: result.assets[0].uri },
+        });
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to select image');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {/* Simplified Header */}
         <View style={styles.headerSection}>
           <Text style={styles.headerTitle}>Welcome!</Text>
-          <Text style={styles.headerSubtitle}>Upload your handwritten quotation to get started</Text>
+          <Text style={styles.headerSubtitle}>
+            Upload your handwritten quotation to get started
+          </Text>
         </View>
 
-        {/* Main Upload Section - More Prominent */}
-        <View style={styles.mainUploadSection}>
-          <TouchableOpacity style={styles.mainUploadCard} onPress={handleUploadFile}>
+        {/* Upload Options Section */}
+        <View style={styles.uploadSection}>
+          <Text style={styles.uploadSectionTitle}>Choose Upload Method</Text>
+
+          {/* Camera Option */}
+          <TouchableOpacity
+            style={styles.uploadOption}
+            onPress={handleCameraCapture}
+            disabled={loading}
+          >
             <LinearGradient
               colors={['#667EEA', '#764BA2']}
-              style={styles.mainUploadGradient}>
-              <View style={styles.uploadIconLarge}>
-                <Upload size={48} color="#FFFFFF" />
+              style={styles.uploadOptionGradient}
+            >
+              <View style={styles.uploadIconContainer}>
+                <Camera size={32} color="#FFFFFF" />
               </View>
-              <Text style={styles.mainUploadTitle}>Upload Image Here</Text>
-              <Text style={styles.mainUploadSubtitle}>Take a photo or select from gallery</Text>
-              <View style={styles.uploadButton}>
-                <Text style={styles.uploadButtonText}>Select Image</Text>
-                <ArrowRight size={20} color="#667EEA" />
+              <View style={styles.uploadTextContainer}>
+                <Text style={styles.uploadOptionTitle}>Take Photo</Text>
+                <Text style={styles.uploadOptionSubtitle}>
+                  Capture with camera
+                </Text>
               </View>
+              <ArrowRight size={20} color="#FFFFFF" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Gallery Option */}
+          <TouchableOpacity
+            style={styles.uploadOption}
+            onPress={handleGallerySelect}
+            disabled={loading}
+          >
+            <LinearGradient
+              colors={['#8B5CF6', '#A855F7']}
+              style={styles.uploadOptionGradient}
+            >
+              <View style={styles.uploadIconContainer}>
+                <Image size={32} color="#FFFFFF" />
+              </View>
+              <View style={styles.uploadTextContainer}>
+                <Text style={styles.uploadOptionTitle}>
+                  Select from Gallery
+                </Text>
+                <Text style={styles.uploadOptionSubtitle}>
+                  Choose existing photo
+                </Text>
+              </View>
+              <ArrowRight size={20} color="#FFFFFF" />
             </LinearGradient>
           </TouchableOpacity>
         </View>
-
 
         {/* Simplified Stats */}
         <View style={styles.statsSection}>
@@ -71,12 +169,6 @@ export default function HomeScreen() {
         {/* Bottom Spacer for Tab Navigation */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
-      <ImageUploadModal
-        visible={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        onImageSelected={handleImageSelected}
-      />
     </View>
   );
 }
@@ -94,7 +186,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 40,
   },
-  
+
   // Simplified Header
   headerSection: {
     paddingHorizontal: 20,
@@ -116,63 +208,57 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Main Upload Section - More Prominent
-  mainUploadSection: {
+  // Upload Options Section
+  uploadSection: {
     paddingHorizontal: 20,
     marginTop: 32,
   },
-  mainUploadCard: {
-    borderRadius: 24,
+  uploadSectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  uploadOption: {
+    borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#667EEA',
-    shadowOffset: { width: 0, height: 8 },
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 12,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  mainUploadGradient: {
-    padding: 40,
+  uploadOptionGradient: {
+    padding: 20,
+    flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 200,
+    minHeight: 80,
   },
-  uploadIconLarge: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  uploadIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginRight: 16,
   },
-  mainUploadTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 8,
-    textAlign: 'center',
+  uploadTextContainer: {
+    flex: 1,
   },
-  mainUploadSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  uploadButton: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  uploadButtonText: {
-    fontSize: 16,
+  uploadOptionTitle: {
+    fontSize: 18,
     fontWeight: '700',
-    color: '#8B5CF6',
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
-
+  uploadOptionSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '500',
+  },
 
   // Simplified Stats
   statsSection: {

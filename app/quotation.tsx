@@ -7,6 +7,8 @@ import {
   Alert,
   Share,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,7 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as MediaLibrary from 'expo-media-library';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuoteStore } from '@/stores/useQuoteStore';
-import { OCR_API_URL, OCR_API_TOKEN } from '@/lib/env';
+import { OCR_API_URL, getOcrApiToken } from '@/lib/env';
 // Display products using the fixed API format
 
 interface QuotationItem {
@@ -205,11 +207,14 @@ export default function ProductListScreen() {
       const requestBody = { data: originalData };
       console.log('📤 Request Body:', JSON.stringify(requestBody, null, 2));
 
+      // Get fresh Firebase ID token
+      const token = await getOcrApiToken();
+
       const res = await fetch(processDataUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${OCR_API_TOKEN}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(requestBody),
       });
@@ -351,196 +356,210 @@ export default function ProductListScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.tableContainer}>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeaderText, styles.noColumn]}>No</Text>
-            <Text style={[styles.tableHeaderText, styles.itemColumn]}>
-              Item
-            </Text>
-            <Text style={[styles.tableHeaderText, styles.qtyColumn]}>Qty</Text>
-            <View style={styles.editColumn} />
-          </View>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.tableContainer}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, styles.noColumn]}>No</Text>
+              <Text style={[styles.tableHeaderText, styles.itemColumn]}>
+                Item
+              </Text>
+              <Text style={[styles.tableHeaderText, styles.qtyColumn]}>
+                Qty
+              </Text>
+              <View style={styles.editColumn} />
+            </View>
 
-          {displayProducts.length > 0 ? (
-            displayProducts.map((product, index) => {
-              // Check if this product has been edited
-              const editedItem = editedItems[product.itemName];
-              const isEditing = editingIndex === index;
+            <ScrollView
+              style={styles.tableScrollView}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+            >
+              {displayProducts.length > 0 ? (
+                displayProducts.map((product, index) => {
+                  // Check if this product has been edited
+                  const editedItem = editedItems[product.itemName];
+                  const isEditing = editingIndex === index;
 
-              // No sub-items aggregation; rely on edited or flat total_quantity
+                  // No sub-items aggregation; rely on edited or flat total_quantity
 
-              // No price or total display needed for Product List
+                  // No price or total display needed for Product List
 
-              return (
-                <View key={`product-${index}-${product.itemNumber || 'empty'}`}>
-                  <View
-                    style={[
-                      styles.tableRow,
-                      index === displayProducts.length - 1 && styles.lastRow,
-                      isEditing && styles.editingRow,
-                    ]}
-                  >
-                    <View style={styles.noColumn}>
-                      <Text style={styles.itemName}>{index + 1}</Text>
-                    </View>
-                    <View style={styles.itemColumn}>
-                      {isEditing ? (
-                        <TextInput
-                          style={styles.editInput}
-                          value={editingName}
-                          onChangeText={setEditingName}
-                          placeholder="Item name"
-                          autoFocus
-                        />
-                      ) : (
-                        <>
-                          <Text style={styles.itemName}>
-                            {product.itemName && product.itemId
-                              ? `${product.itemName}-${product.itemId}`
-                              : product.itemName
-                              ? product.itemName
-                              : product.itemId
-                              ? product.itemId
-                              : 'Empty Row'}
-                          </Text>
-                          {product.itemNumber && (
-                            <Text style={styles.itemDescription}>
-                              Item #{product.itemNumber}
+                  return (
+                    <View
+                      key={`product-${index}-${product.itemNumber || 'empty'}`}
+                    >
+                      <View
+                        style={[
+                          styles.tableRow,
+                          index === displayProducts.length - 1 &&
+                            styles.lastRow,
+                          isEditing && styles.editingRow,
+                        ]}
+                      >
+                        <View style={styles.noColumn}>
+                          <Text style={styles.itemName}>{index + 1}</Text>
+                        </View>
+                        <View style={styles.itemColumn}>
+                          {isEditing ? (
+                            <TextInput
+                              style={styles.editInput}
+                              value={editingName}
+                              onChangeText={setEditingName}
+                              placeholder="Item name"
+                              autoFocus
+                            />
+                          ) : (
+                            <>
+                              <Text style={styles.itemName}>
+                                {product.itemName && product.itemId
+                                  ? `${product.itemName}-${product.itemId}`
+                                  : product.itemName
+                                  ? product.itemName
+                                  : product.itemId
+                                  ? product.itemId
+                                  : 'Empty Row'}
+                              </Text>
+                              {product.itemNumber && (
+                                <Text style={styles.itemDescription}>
+                                  Item #{product.itemNumber}
+                                </Text>
+                              )}
+                              {(() => {
+                                const desc = product.itemDescription || '';
+                                return desc ? (
+                                  <Text style={styles.itemDescription}>
+                                    {desc}
+                                  </Text>
+                                ) : null;
+                              })()}
+                            </>
+                          )}
+                        </View>
+                        <View style={styles.qtyColumn}>
+                          {isEditing ? (
+                            <TextInput
+                              style={styles.editInputQty}
+                              value={editingQuantity}
+                              onChangeText={setEditingQuantity}
+                              placeholder="Qty"
+                              keyboardType="numeric"
+                            />
+                          ) : (
+                            <Text style={styles.tableText}>
+                              {editedItem
+                                ? String(editedItem.quantity || '')
+                                : product.itemQuantity
+                                ? String(product.itemQuantity)
+                                : ''}
                             </Text>
                           )}
-                          {(() => {
-                            const desc = product.itemDescription || '';
-                            return desc ? (
-                              <Text style={styles.itemDescription}>{desc}</Text>
-                            ) : null;
-                          })()}
-                        </>
-                      )}
+                        </View>
+                        {isEditing ? (
+                          <View style={styles.editActionsColumn}>
+                            <TouchableOpacity
+                              style={styles.saveButton}
+                              onPress={() => saveEditingRow(product)}
+                            >
+                              <Check size={16} color="#10B981" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.cancelButton}
+                              onPress={cancelEditingRow}
+                            >
+                              <X size={16} color="#EF4444" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.editColumn}
+                            onPress={() => startEditingRow(product, index)}
+                          >
+                            <Edit size={16} color="#8B5CF6" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })
+              ) : (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No products found</Text>
+                  <Text style={styles.emptyStateSubtext}>
+                    Upload an image to extract hardware products
+                  </Text>
+                </View>
+              )}
+
+              {/* Standalone user-added items */}
+              {standaloneEditedItems.length > 0 &&
+                standaloneEditedItems.map((it, idx) => (
+                  <View
+                    key={`manual-${idx}-${it.name}`}
+                    style={styles.tableRow}
+                  >
+                    <View style={styles.itemColumn}>
+                      <Text style={styles.itemName}>{it.name}</Text>
+                      <Text style={styles.itemDescription}>Custom Item</Text>
                     </View>
                     <View style={styles.qtyColumn}>
-                      {isEditing ? (
-                        <TextInput
-                          style={styles.editInputQty}
-                          value={editingQuantity}
-                          onChangeText={setEditingQuantity}
-                          placeholder="Qty"
-                          keyboardType="numeric"
-                        />
-                      ) : (
-                        <Text style={styles.tableText}>
-                          {editedItem
-                            ? String(editedItem.quantity || '')
-                            : product.itemQuantity
-                            ? String(product.itemQuantity)
-                            : ''}
-                        </Text>
-                      )}
+                      <Text style={styles.tableText}>
+                        {String(it.quantity)}
+                      </Text>
                     </View>
-                    {isEditing ? (
-                      <View style={styles.editActionsColumn}>
-                        <TouchableOpacity
-                          style={styles.saveButton}
-                          onPress={() => saveEditingRow(product)}
-                        >
-                          <Check size={16} color="#10B981" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.cancelButton}
-                          onPress={cancelEditingRow}
-                        >
-                          <X size={16} color="#EF4444" />
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.editColumn}
-                        onPress={() => startEditingRow(product, index)}
-                      >
-                        <Edit size={16} color="#8B5CF6" />
-                      </TouchableOpacity>
-                    )}
+                    <TouchableOpacity
+                      style={styles.editColumn}
+                      onPress={() =>
+                        handleEditItem({
+                          id: '',
+                          name: it.name,
+                          description: '',
+                          quantity: it.quantity,
+                          price: 0,
+                          gst: 0,
+                          total: 0,
+                        })
+                      }
+                    >
+                      <Edit size={16} color="#8B5CF6" />
+                    </TouchableOpacity>
                   </View>
-                </View>
-              );
-            })
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No products found</Text>
-              <Text style={styles.emptyStateSubtext}>
-                Upload an image to extract hardware products
-              </Text>
-            </View>
-          )}
-
-          {/* Standalone user-added items */}
-          {standaloneEditedItems.length > 0 &&
-            standaloneEditedItems.map((it, idx) => (
-              <View key={`manual-${idx}-${it.name}`} style={styles.tableRow}>
-                <View style={styles.itemColumn}>
-                  <Text style={styles.itemName}>{it.name}</Text>
-                  <Text style={styles.itemDescription}>Custom Item</Text>
-                </View>
-                <View style={styles.qtyColumn}>
-                  <Text style={styles.tableText}>{String(it.quantity)}</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.editColumn}
-                  onPress={() =>
-                    handleEditItem({
-                      id: '',
-                      name: it.name,
-                      description: '',
-                      quantity: it.quantity,
-                      price: 0,
-                      gst: 0,
-                      total: 0,
-                    })
-                  }
-                >
-                  <Edit size={16} color="#8B5CF6" />
-                </TouchableOpacity>
-              </View>
-            ))}
-          <TouchableOpacity
-            style={styles.addItemButton}
-            onPress={handleAddItem}
-          >
-            <Plus size={20} color="#8B5CF6" />
-            <Text style={styles.addItemText}>Add Item</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[
-              styles.reviewButton,
-              isSubmitting && styles.submittingButton,
-            ]}
-            onPress={handleSubmitToBackend}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.reviewButtonText}>
-              {isSubmitting ? 'Submitting...' : 'Submit'}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.bottomButtons}>
-            <TouchableOpacity style={styles.pdfButton} onPress={handleSharePdf}>
-              <ShareIcon size={18} color="#FFFFFF" />
-              <Text style={styles.pdfButtonText}>Share PDF</Text>
-            </TouchableOpacity>
+                ))}
+            </ScrollView>
 
             <TouchableOpacity
-              style={styles.whatsappButton}
-              onPress={handleDownloadOcrImage}
+              style={styles.addItemButton}
+              onPress={handleAddItem}
             >
-              <ShareIcon size={18} color="#FFFFFF" />
-              <Text style={styles.whatsappButtonText}>Download Image</Text>
+              <Plus size={20} color="#8B5CF6" />
+              <Text style={styles.addItemText}>Add Item</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </ScrollView>
+
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[
+                styles.reviewButton,
+                isSubmitting && styles.submittingButton,
+              ]}
+              onPress={handleSubmitToBackend}
+              disabled={isSubmitting}
+            >
+              <Text style={styles.reviewButtonText}>
+                {isSubmitting ? 'Submitting...' : 'Submit'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
       <Toast />
     </SafeAreaView>
   );
@@ -550,6 +569,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  keyboardView: {
+    flex: 1,
   },
   header: {
     paddingHorizontal: 24,
@@ -608,6 +630,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+    maxHeight: 500, // Max height for the table container
+  },
+  tableScrollView: {
+    maxHeight: 400, // Max scrollable height for the table rows
   },
   tableHeader: {
     flexDirection: 'row',
