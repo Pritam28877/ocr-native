@@ -14,12 +14,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // };
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyA4dlUUcF1jxiFKO99v5u1mNdBDykP5I9I',
+  apiKey: 'AIzaSyCBB_21uuDVfAXXNySvWQYmTuXoVgzAWTE',
   authDomain: 'oceanic-depth-473615-v3.firebaseapp.com',
   projectId: 'oceanic-depth-473615-v3',
   storageBucket: 'oceanic-depth-473615-v3.firebasestorage.app',
   messagingSenderId: '329174454207',
-  appId: '1:329174454207:web:43039b6a0cf46754dd1b0a',
+  appId: '1:329174454207:android:a0630ede850430e1dd1b0a',
   measurementId: 'G-5XCPXW85YS',
 };
 // Initialize Firebase

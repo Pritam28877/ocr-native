@@ -1,57 +1,50 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Smartphone, Mail, Rocket } from 'lucide-react-native';
+import { ArrowLeft, Smartphone, Rocket } from 'lucide-react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { sendVerificationCode } from '@/lib/phoneAuth';
-import { sendEmailVerificationLink, sendMockEmailVerification } from '@/lib/emailAuth';
-import RecaptchaContainer from '@/components/RecaptchaContainer';
+// import RecaptchaContainer from '@/components/RecaptchaContainer';
 
 export default function LoginScreen() {
   const { colors } = useTheme();
-  const [loginMethod, setLoginMethod] = useState<'phone' | 'email'>('phone');
-  const [phoneNumber, setPhoneNumber] = useState('+91 ');
-  const [email, setEmail] = useState('');
+  // const [phoneNumber, setPhoneNumber] = useState('+91 ');
+  const [phoneNumber, setPhoneNumber] = useState('+918580486958');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    const contact = loginMethod === 'phone' ? phoneNumber : email;
-    if (!contact.trim()) {
-      Alert.alert('Error', 'Please enter a valid phone number or email');
+    if (!phoneNumber.trim() || phoneNumber.trim() === '+91') {
+      Alert.alert('Error', 'Please enter a valid phone number');
       return;
     }
 
-    if (loginMethod === 'phone') {
-      try {
-        setLoading(true);
-        const { verificationId } = await sendVerificationCode(contact.trim());
-        
-        // Pass verificationId for verification
-        router.push({
-          pathname: '/otp',
-          params: { 
-            method: loginMethod, 
-            contact: contact.trim(),
-            verificationId
-          }
-        });
-      } catch (error: any) {
-        setLoading(false);
-        Alert.alert('Error', error.message || 'Failed to send verification code');
-      }
-    } else {
-      // Email verification
-      try {
-        setLoading(true);
-        await sendEmailVerificationLink(contact.trim());
-        // Navigate to verify-email handler screen which will complete the flow on link open
-        router.push('/verify-email');
-      } catch (error: any) {
-        setLoading(false);
-        Alert.alert('Error', error.message || 'Failed to send email verification');
-      }
+    try {
+      setLoading(true);
+      const confirmation = await sendVerificationCode(phoneNumber.trim());
+
+      // Pass the confirmation object to OTP screen
+      router.push({
+        pathname: '/otp',
+        params: {
+          method: 'phone',
+          contact: phoneNumber.trim(),
+          confirmation: JSON.stringify(confirmation), // pass as string
+        },
+      });
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert('Error', error.message || 'Failed to send verification code');
     }
   };
 
@@ -66,14 +59,11 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#8B5CF6', '#A855F7']}
-        style={styles.background}>
-        
-        <KeyboardAvoidingView 
+      <LinearGradient colors={['#8B5CF6', '#A855F7']} style={styles.background}>
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}>
-          
+          style={styles.keyboardView}
+        >
           <View style={styles.content}>
             <View style={styles.header}>
               <TouchableOpacity style={styles.backButton} onPress={handleBack}>
@@ -82,71 +72,59 @@ export default function LoginScreen() {
               <Text style={styles.headerTitle}>Welcome Back</Text>
             </View>
 
-            <View style={[styles.loginCard, { backgroundColor: colors.surface }]}>
+            <View
+              style={[styles.loginCard, { backgroundColor: colors.surface }]}
+            >
               <View style={styles.iconContainer}>
-                <View style={[styles.iconCircle, { backgroundColor: colors.primary }]}>
-                  <View style={styles.iconInner} />
+                <View
+                  style={[
+                    styles.iconCircle,
+                    { backgroundColor: colors.primary },
+                  ]}
+                >
+                  <Smartphone size={36} color="#FFFFFF" />
                 </View>
               </View>
 
-              <Text style={[styles.signInText, { color: colors.textSecondary }]}>Sign in to continue</Text>
+              <Text
+                style={[styles.signInText, { color: colors.textSecondary }]}
+              >
+                Sign in with Phone Number
+              </Text>
+              <Text
+                style={[styles.signInSubtext, { color: colors.textSecondary }]}
+              >
+                We'll send you an OTP to verify
+              </Text>
 
-              <View style={[styles.methodSelector, { backgroundColor: colors.background }]}>
-                <TouchableOpacity
-                  style={[
-                    styles.methodButton,
-                    loginMethod === 'phone' && { backgroundColor: colors.primary }
-                  ]}
-                  onPress={() => setLoginMethod('phone')}>
-                  <Smartphone size={16} color={loginMethod === 'phone' ? '#FFFFFF' : colors.primary} />
-                  <Text style={[
-                    styles.methodButtonText, 
-                    { color: loginMethod === 'phone' ? '#FFFFFF' : colors.primary }
-                  ]}>Phone</Text>
-                </TouchableOpacity>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                placeholder="+91 XXXXX XXXXX"
+                placeholderTextColor={colors.textSecondary}
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+                autoFocus
+              />
 
-                <TouchableOpacity
-                  style={[
-                    styles.methodButton,
-                    loginMethod === 'email' && { backgroundColor: colors.primary }
-                  ]}
-                  onPress={() => setLoginMethod('email')}>
-                  <Mail size={16} color={loginMethod === 'email' ? '#FFFFFF' : colors.primary} />
-                  <Text style={[
-                    styles.methodButtonText, 
-                    { color: loginMethod === 'email' ? '#FFFFFF' : colors.primary }
-                  ]}>Email</Text>
-                </TouchableOpacity>
-              </View>
-
-              {loginMethod === 'phone' ? (
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                  placeholder="+91 XXXXX XXXXX"
-                  placeholderTextColor={colors.textSecondary}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  keyboardType="phone-pad"
-                />
-              ) : (
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                  placeholder="Enter your email"
-                  placeholderTextColor={colors.textSecondary}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              )}
-
-              <TouchableOpacity 
-                style={styles.loginButton} 
+              <TouchableOpacity
+                style={styles.loginButton}
                 onPress={handleLogin}
-                disabled={loading}>
+                disabled={loading}
+              >
                 <LinearGradient
-                  colors={loading ? ['#9CA3AF', '#6B7280'] : ['#06B6D4', '#0891B2']}
-                  style={styles.loginButtonGradient}>
+                  colors={
+                    loading ? ['#9CA3AF', '#6B7280'] : ['#06B6D4', '#0891B2']
+                  }
+                  style={styles.loginButtonGradient}
+                >
                   <Rocket size={16} color="#FFFFFF" />
                   <Text style={styles.loginButtonText}>
                     {loading ? 'Sending...' : 'Login'}
@@ -154,13 +132,20 @@ export default function LoginScreen() {
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.guestButton} onPress={handleContinueAsGuest}>
-                <Text style={[styles.guestButtonText, { color: colors.primary }]}>👤 Continue as Guest</Text>
+              <TouchableOpacity
+                style={styles.guestButton}
+                onPress={handleContinueAsGuest}
+              >
+                <Text
+                  style={[styles.guestButtonText, { color: colors.primary }]}
+                >
+                  👤 Continue as Guest
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
         </KeyboardAvoidingView>
-        <RecaptchaContainer />
+        {/* <RecaptchaContainer />c */}
       </LinearGradient>
     </SafeAreaView>
   );
@@ -220,36 +205,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-  },
   signInText: {
-    fontSize: 16,
-    marginBottom: 24,
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
   },
-  methodSelector: {
-    flexDirection: 'row',
-    width: '100%',
-    marginBottom: 24,
-    borderRadius: 12,
-    padding: 4,
-  },
-  methodButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    gap: 8,
-  },
-  methodButtonText: {
+  signInSubtext: {
     fontSize: 14,
-    fontWeight: '500',
+    marginBottom: 32,
+    textAlign: 'center',
   },
   input: {
     width: '100%',
