@@ -16,7 +16,6 @@ import {
   ArrowLeft,
   Share as ShareIcon,
   Download,
-  Printer,
   Edit3 as Edit,
   Check,
   X,
@@ -24,6 +23,9 @@ import {
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 
 interface QuotationItem {
   itemNumber: number;
@@ -42,6 +44,7 @@ interface QuotationItem {
 interface FinalQuotationData {
   items: QuotationItem[];
   subtotal: number;
+  discount_amount: number;
   gst_amount: number;
   total_amount: number;
   quotation_number?: string;
@@ -90,6 +93,14 @@ function FinalQuotationContent() {
   const [editingPrice, setEditingPrice] = useState('');
   const [editingDiscount, setEditingDiscount] = useState('');
   const [items, setItems] = useState<QuotationItem[]>([]);
+  const [hasMediaPerm, setHasMediaPerm] = useState<boolean>(false);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      setHasMediaPerm(status === 'granted');
+    })();
+  }, []);
 
   useEffect(() => {
     try {
@@ -163,7 +174,7 @@ function FinalQuotationContent() {
     }
   }, [quotationData, matchData, originalData]);
 
-  // Recalculate totals whenever items, gstRate or globalDiscount changes
+  // Recalculate totals whenever items, gstRate, or globalDiscount changes
   useEffect(() => {
     if (items.length > 0) {
       const subtotal = items.reduce((sum, item) => {
@@ -181,6 +192,7 @@ function FinalQuotationContent() {
       setQuotation({
         items,
         subtotal,
+        discount_amount: discountAmount,
         gst_amount: gstAmount,
         total_amount: totalAmount,
         date: new Date().toLocaleDateString(),
@@ -228,60 +240,127 @@ function FinalQuotationContent() {
     setEditingDiscount('');
   };
 
-  const handleShare = async () => {
+  const generatePdfHtml = (data: FinalQuotationData) => {
+    const itemsHtml = data.items
+      .map(
+        (item) => `
+      <tr>
+        <td>${item.itemNumber}</td>
+        <td>${item.itemName} ${item.itemDescription || ''}</td>
+        <td>${item.quantity}</td>
+        <td>${formatCurrency(item.unit_price)}</td>
+        <td>${item.defaultDiscount || 0}%</td>
+        <td>${formatCurrency(item.total_price)}</td>
+      </tr>
+    `
+      )
+      .join('');
+
+    return `
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+            h1 { text-align: center; color: #8B5CF6; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .summary { float: right; width: 40%; margin-top: 20px; }
+            .summary td { border: 0; }
+          </style>
+        </head>
+        <body>
+          <h1>Quotation</h1>
+          <p><strong>Date:</strong> ${data.date}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Discount</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          <table class="summary">
+            <tr>
+              <td>Subtotal:</td>
+              <td>${formatCurrency(data.subtotal)}</td>
+            </tr>
+            <tr>
+              <td>Discount:</td>
+              <td>${formatCurrency(data.discount_amount)}</td>
+            </tr>
+            <tr>
+              <td>GST:</td>
+              <td>${formatCurrency(data.gst_amount)}</td>
+            </tr>
+            <tr>
+              <td><strong>Total:</strong></td>
+              <td><strong>${formatCurrency(data.total_amount)}</strong></td>
+            </tr>
+          </table>
+        </body>
+      </html>
+    `;
+  };
+
+  const createPdf = async () => {
+    if (!quotation) return;
     try {
-      const shareText = generateQuotationText();
-      await Share.share({
-        message: shareText,
-        title: 'Quotation',
-      });
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Failed to share quotation',
-        position: 'top',
-        visibilityTime: 3000,
-      });
+      const html = generatePdfHtml(quotation);
+      const { uri } = await Print.printToFileAsync({ html });
+      return uri;
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Failed to generate PDF.');
+    }
+  };
+
+  const handleShare = async () => {
+    const uri = await createPdf();
+    if (uri) {
+      await Sharing.shareAsync(uri);
     }
   };
 
   const handleDownloadPDF = async () => {
-    try {
-      // TODO: Implement PDF generation
-      Toast.show({
-        type: 'success',
-        text1: 'Success',
-        text2: 'PDF download will be implemented',
-        position: 'top',
-        visibilityTime: 3000,
-      });
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Failed to download PDF',
-        position: 'top',
-        visibilityTime: 3000,
-      });
-    }
-  };
+    const uri = await createPdf();
+    if (!uri) return;
 
-  const handlePrint = async () => {
+    if (!hasMediaPerm) {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission required',
+          'Media library permission is needed to save the PDF.'
+        );
+        return;
+      }
+      setHasMediaPerm(true);
+    }
+
     try {
-      // TODO: Implement print functionality
+      const asset = await MediaLibrary.createAssetAsync(uri);
+      await MediaLibrary.createAlbumAsync('Quotations', asset, false);
       Toast.show({
         type: 'success',
-        text1: 'Success',
-        text2: 'Print functionality will be implemented',
+        text1: 'Saved!',
+        text2: 'PDF saved to your gallery in "Quotations" album.',
         position: 'top',
         visibilityTime: 3000,
       });
     } catch (error) {
+      console.error(error);
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to print',
+        text2: 'Failed to save PDF.',
         position: 'top',
         visibilityTime: 3000,
       });
@@ -603,11 +682,6 @@ function FinalQuotationContent() {
             >
               <Download size={20} color="#8B5CF6" />
               <Text style={styles.actionButtonText}>Download PDF</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionButton} onPress={handlePrint}>
-              <Printer size={20} color="#8B5CF6" />
-              <Text style={styles.actionButtonText}>Print</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
