@@ -78,10 +78,10 @@ export default function OTPScreen() {
 
   const handleVerifyOtp = async () => {
     const otpCode = otp.join('');
-    if (otpCode.length !== 6) {
-      Alert.alert('Error', 'Please enter a complete 6-digit code');
-      return;
-    }
+    // if (otpCode.length !== 6) {
+    //   Alert.alert('Error', 'Please enter a complete 6-digit code');
+    //   return;
+    // }
 
     try {
       setLoading(true);

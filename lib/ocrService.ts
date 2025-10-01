@@ -1,5 +1,5 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
-import { OCR_API_URL, OCR_API_TOKEN, assertOcrConfig } from './env';
+import { OCR_API_URL, getOcrApiToken, assertOcrConfig } from './env';
 
 export interface OcrApiResponse {
   success: boolean;
@@ -15,14 +15,17 @@ export interface OcrApiResponse {
   };
 }
 
-export async function uploadImageToOcr(imageUri: string): Promise<OcrApiResponse> {
+export async function uploadImageToOcr(
+  imageUri: string
+): Promise<OcrApiResponse> {
   assertOcrConfig();
+
+  // Get fresh Firebase ID token
+  const token = await getOcrApiToken();
 
   const processedImage = await manipulateAsync(
     imageUri,
-    [
-      { resize: { width: 1200 } },
-    ],
+    [{ resize: { width: 1200 } }],
     { compress: 0.8, format: SaveFormat.JPEG }
   );
 
@@ -36,7 +39,7 @@ export async function uploadImageToOcr(imageUri: string): Promise<OcrApiResponse
   console.log('Sending request to:', OCR_API_URL);
   const res = await fetch(OCR_API_URL, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${OCR_API_TOKEN}` },
+    headers: { Authorization: `Bearer ${token}` },
     body: form as any,
   });
 
@@ -47,6 +50,3 @@ export async function uploadImageToOcr(imageUri: string): Promise<OcrApiResponse
 
   return (await res.json()) as OcrApiResponse;
 }
-
-
-
