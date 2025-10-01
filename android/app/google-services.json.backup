@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "329174454207",
+    "project_id": "oceanic-depth-473615-v3",
+    "storage_bucket": "oceanic-depth-473615-v3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:329174454207:android:a0630ede850430e1dd1b0a",
+        "android_client_info": {
+          "package_name": "com.qi.ocr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCBB_21uuDVfAXXNySvWQYmTuXoVgzAWTE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:329174454207:android:64db1b74f4d59163dd1b0a",
+        "android_client_info": {
+          "package_name": "com.qk.q"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCBB_21uuDVfAXXNySvWQYmTuXoVgzAWTE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

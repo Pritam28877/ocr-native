@@ -20,7 +20,7 @@ import { sendVerificationCode } from '@/lib/phoneAuth';
 export default function LoginScreen() {
   const { colors } = useTheme();
   // const [phoneNumber, setPhoneNumber] = useState('+91 ');
-  const [phoneNumber, setPhoneNumber] = useState('+918580486958');
+  const [phoneNumber, setPhoneNumber] = useState('+918446095023');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -33,13 +33,13 @@ export default function LoginScreen() {
       setLoading(true);
       const confirmation = await sendVerificationCode(phoneNumber.trim());
 
-      // Pass the confirmation object to OTP screen
+      // Pass the verificationId to OTP screen
       router.push({
         pathname: '/otp',
         params: {
           method: 'phone',
           contact: phoneNumber.trim(),
-          confirmation: JSON.stringify(confirmation), // pass as string
+          verificationId: confirmation.verificationId,
         },
       });
     } catch (error: any) {

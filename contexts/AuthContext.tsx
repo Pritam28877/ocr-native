@@ -5,11 +5,10 @@ import React, {
   useState,
   useRef,
 } from 'react';
-import { User, onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 
 interface AuthContextType {
-  user: User | null;
+  user: FirebaseAuthTypes.User | null;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -17,12 +16,12 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
   const [loading, setLoading] = useState(true);
   const tokenRefreshTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = auth().onAuthStateChanged(async (user) => {
       setUser(user);
       setLoading(false);
 
@@ -62,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      await auth().signOut();
     } catch (error) {
       console.error('Error signing out:', error);
     }
