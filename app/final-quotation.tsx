@@ -1,7 +1,26 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Share,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Share as ShareIcon, Download, Printer } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Share as ShareIcon,
+  Download,
+  Printer,
+  Edit3 as Edit,
+  Check,
+  X,
+} from 'lucide-react-native';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
@@ -64,19 +83,39 @@ function FinalQuotationContent() {
   const { quotationData, matchData, originalData } = useLocalSearchParams();
   const [quotation, setQuotation] = useState<FinalQuotationData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gstRate, setGstRate] = useState(18);
+  const [globalDiscount, setGlobalDiscount] = useState(0);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingQuantity, setEditingQuantity] = useState('');
+  const [editingPrice, setEditingPrice] = useState('');
+  const [editingDiscount, setEditingDiscount] = useState('');
+  const [items, setItems] = useState<QuotationItem[]>([]);
 
   useEffect(() => {
     try {
       if (matchData && originalData) {
-        const matchRes = JSON.parse(matchData as string) as { success: boolean; data: MatchItem[] };
-        const original = JSON.parse(originalData as string) as Array<{ itemNumber: number; itemId: string | null; itemName: string; itemDescription: string | null; itemQuantity: number }>;
+        const matchRes = JSON.parse(matchData as string) as {
+          success: boolean;
+          data: MatchItem[];
+        };
+        const original = JSON.parse(originalData as string) as Array<{
+          itemNumber: number;
+          itemId: string | null;
+          itemName: string;
+          itemDescription: string | null;
+          itemQuantity: number;
+        }>;
 
         // Build items list: when matchedProducts present, use matched; otherwise use original item
         const items = (matchRes?.data || []).map((mi) => {
-          const originalItem = original.find((o) => o.itemNumber === mi.itemNumber);
+          const originalItem = original.find(
+            (o) => o.itemNumber === mi.itemNumber
+          );
           const topMatch = (mi.matchedProducts || [])[0];
           if (topMatch) {
-            const combinedName = topMatch.itemId ? `${topMatch.itemId} ${topMatch.itemName}` : topMatch.itemName;
+            const combinedName = topMatch.itemId
+              ? `${topMatch.itemId} ${topMatch.itemName}`
+              : topMatch.itemName;
             return {
               itemNumber: mi.itemNumber,
               itemId: topMatch.itemId,
@@ -93,7 +132,9 @@ function FinalQuotationContent() {
           }
           // No matches: show original item info
           const name = originalItem?.itemName ?? '';
-          const combined = originalItem?.itemId ? `${originalItem.itemId} ${name}` : name;
+          const combined = originalItem?.itemId
+            ? `${originalItem.itemId} ${name}`
+            : name;
           return {
             itemNumber: mi.itemNumber,
             itemId: originalItem?.itemId ?? null,
@@ -105,19 +146,14 @@ function FinalQuotationContent() {
           } as any;
         });
 
-        const subtotal = items.reduce((sum, it: any) => sum + (Number(it.total_price) || 0), 0);
-        const built: FinalQuotationData = {
-          items: items as any,
-          subtotal,
-          gst_amount: 0,
-          total_amount: subtotal,
-          date: new Date().toLocaleDateString(),
-        };
-        setQuotation(built);
+        setItems(items as any);
       } else if (quotationData) {
         const parsedData = JSON.parse(quotationData as string);
-        console.log('FinalQuotation received data:', JSON.stringify(parsedData, null, 2));
-        setQuotation(parsedData);
+        console.log(
+          'FinalQuotation received data:',
+          JSON.stringify(parsedData, null, 2)
+        );
+        setItems(parsedData.items || []);
       }
     } catch (error) {
       console.error('Error parsing quotation data:', error);
@@ -126,6 +162,71 @@ function FinalQuotationContent() {
       setLoading(false);
     }
   }, [quotationData, matchData, originalData]);
+
+  // Recalculate totals whenever items, gstRate or globalDiscount changes
+  useEffect(() => {
+    if (items.length > 0) {
+      const subtotal = items.reduce((sum, item) => {
+        const itemTotal =
+          item.unit_price * item.quantity -
+          (item.unit_price * item.quantity * (item.defaultDiscount || 0)) / 100;
+        return sum + itemTotal;
+      }, 0);
+
+      const discountAmount = (subtotal * (globalDiscount || 0)) / 100;
+      const afterDiscount = subtotal - discountAmount;
+      const gstAmount = (afterDiscount * gstRate) / 100;
+      const totalAmount = afterDiscount + gstAmount;
+
+      setQuotation({
+        items,
+        subtotal,
+        gst_amount: gstAmount,
+        total_amount: totalAmount,
+        date: new Date().toLocaleDateString(),
+      });
+    }
+  }, [items, gstRate, globalDiscount]);
+
+  const startEditingRow = (item: QuotationItem, index: number) => {
+    setEditingIndex(index);
+    setEditingQuantity(String(item.quantity || ''));
+    setEditingPrice(String(item.unit_price || ''));
+    setEditingDiscount(String(item.defaultDiscount || '0'));
+  };
+
+  const saveEditingRow = () => {
+    if (editingIndex === null) return;
+
+    const updatedItems = [...items];
+    const item = updatedItems[editingIndex];
+
+    item.quantity = Number(editingQuantity) || 0;
+    item.unit_price = Number(editingPrice) || 0;
+    item.defaultDiscount = Number(editingDiscount) || 0;
+
+    // Calculate total_price with discount
+    const priceAfterDiscount =
+      item.unit_price - item.unit_price * (item.defaultDiscount / 100);
+    item.total_price = priceAfterDiscount * item.quantity;
+
+    setItems(updatedItems);
+    cancelEditingRow();
+
+    Toast.show({
+      type: 'success',
+      text1: 'Item Updated',
+      text2: 'Changes saved successfully',
+      position: 'bottom',
+    });
+  };
+
+  const cancelEditingRow = () => {
+    setEditingIndex(null);
+    setEditingQuantity('');
+    setEditingPrice('');
+    setEditingDiscount('');
+  };
 
   const handleShare = async () => {
     try {
@@ -189,34 +290,48 @@ function FinalQuotationContent() {
 
   const generateQuotationText = () => {
     if (!quotation) return '';
-    
+
     let text = `QUOTATION\n\n`;
     if (quotation.company_name) text += `Company: ${quotation.company_name}\n`;
-    if (quotation.customer_name) text += `Customer: ${quotation.customer_name}\n`;
-    if (quotation.quotation_number) text += `Quotation #: ${quotation.quotation_number}\n`;
+    if (quotation.customer_name)
+      text += `Customer: ${quotation.customer_name}\n`;
+    if (quotation.quotation_number)
+      text += `Quotation #: ${quotation.quotation_number}\n`;
     if (quotation.date) text += `Date: ${quotation.date}\n\n`;
-    
+
     text += `ITEMS:\n`;
     text += `----------------------------------------\n`;
-    
+
     quotation.items.forEach((item, index) => {
-      const combined = item.itemId ? `${item.itemId} ${item.itemName}` : item.itemName;
+      const combined = item.itemId
+        ? `${item.itemId} ${item.itemName}`
+        : item.itemName;
       text += `${index + 1}. ${combined}\n`;
       text += `   Qty: ${item.quantity} | Price: ₹${item.unit_price} | Total: ₹${item.total_price}\n`;
-      if (item.gst_rate) text += `   GST (${item.gst_rate}%): ₹${item.gst_amount}\n`;
+      if (item.gst_rate)
+        text += `   GST (${item.gst_rate}%): ₹${item.gst_amount}\n`;
       text += `\n`;
     });
-    
+
     text += `----------------------------------------\n`;
     text += `Subtotal: ₹${quotation.subtotal}\n`;
     text += `GST: ₹${quotation.gst_amount}\n`;
     text += `TOTAL: ₹${quotation.total_amount}\n`;
-    
+
     return text;
   };
 
   const formatCurrency = (amount: number) => {
-    return `₹${amount.toFixed(2)}`;
+    try {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 2,
+      }).format(Number.isFinite(amount) ? amount : 0);
+    } catch {
+      // Fallback
+      return `₹${(Number.isFinite(amount) ? amount : 0).toFixed(2)}`;
+    }
   };
 
   if (loading) {
@@ -234,7 +349,10 @@ function FinalQuotationContent() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>No quotation data available</Text>
-          <TouchableOpacity style={styles.errorBackButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.errorBackButton}
+            onPress={() => router.back()}
+          >
             <Text style={styles.errorBackButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -244,109 +362,256 @@ function FinalQuotationContent() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#8B5CF6', '#A855F7']}
-        style={styles.header}>
+      <LinearGradient colors={['#8B5CF6', '#A855F7']} style={styles.header}>
         <View style={styles.headerContent}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>Final Quotation</Text>
             {quotation.quotation_number && (
-              <Text style={styles.headerSubtitle}>#{quotation.quotation_number}</Text>
+              <Text style={styles.headerSubtitle}>
+                #{quotation.quotation_number}
+              </Text>
             )}
           </View>
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Company & Customer Info */}
-        {(quotation.company_name || quotation.customer_name || quotation.date) && (
-          <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>Quotation Details</Text>
-            {quotation.company_name && (
-              <Text style={styles.infoText}>Company: {quotation.company_name}</Text>
-            )}
-            {quotation.customer_name && (
-              <Text style={styles.infoText}>Customer: {quotation.customer_name}</Text>
-            )}
-            {quotation.date && (
-              <Text style={styles.infoText}>Date: {quotation.date}</Text>
-            )}
-          </View>
-        )}
-
-        {/* Items Table: itemName, itemQuantity, brand, price, defaultDiscount */}
-        <View style={styles.tableContainer}>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeaderText, styles.itemColumn]}>Item</Text>
-            <Text style={[styles.tableHeaderText, styles.qtyColumn]}>Qty</Text>
-            <Text style={[styles.tableHeaderText, styles.brandColumn]}>Brand</Text>
-            <Text style={[styles.tableHeaderText, styles.priceColumn]}>Price</Text>
-            <Text style={[styles.tableHeaderText, styles.discountColumn]} numberOfLines={1} ellipsizeMode="clip">Discount</Text>
-          </View>
-
-          {quotation.items.map((item, index) => (
-            <View key={item.itemNumber} style={[styles.tableRow, index === quotation.items.length - 1 && styles.lastRow]}>
-              <View style={styles.itemColumn}>
-                <Text style={styles.itemName} numberOfLines={2}>
-                  {item.itemId ? `${item.itemId} ${item.itemName}` : item.itemName}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Company & Customer Info */}
+          {(quotation.company_name ||
+            quotation.customer_name ||
+            quotation.date) && (
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>Quotation Details</Text>
+              {quotation.company_name && (
+                <Text style={styles.infoText}>
+                  Company: {quotation.company_name}
                 </Text>
-                <Text style={styles.itemNumber}>Item #{item.itemNumber}</Text>
-              </View>
-              <View style={styles.qtyColumn}>
-                <Text style={styles.tableText}>{item.quantity}</Text>
-              </View>
-              <View style={styles.brandColumn}>
-                <Text style={styles.tableText}>{item.brand ?? ''}</Text>
-              </View>
-              <View style={styles.priceColumn}>
-                <Text style={styles.tableText}>{item.unit_price ? formatCurrency(item.unit_price) : ''}</Text>
-              </View>
-              <View style={styles.discountColumn}>
-                <Text style={styles.tableText}>{
-                  typeof item.defaultDiscount === 'number' ? `${item.defaultDiscount}%` : ''
-                }</Text>
-              </View>
+              )}
+              {quotation.customer_name && (
+                <Text style={styles.infoText}>
+                  Customer: {quotation.customer_name}
+                </Text>
+              )}
+              {quotation.date && (
+                <Text style={styles.infoText}>Date: {quotation.date}</Text>
+              )}
             </View>
-          ))}
-        </View>
+          )}
 
-        {/* Summary */}
-        <View style={styles.summaryContainer}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal:</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(quotation.subtotal)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>GST:</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(quotation.gst_amount)}</Text>
-          </View>
-          <View style={[styles.summaryRow, styles.grandTotalRow]}>
-            <Text style={styles.grandTotalLabel}>Total:</Text>
-            <Text style={styles.grandTotalValue}>{formatCurrency(quotation.total_amount)}</Text>
-          </View>
-        </View>
+          {/* Items Table: itemName, itemQuantity, price, discount, total */}
+          <View style={styles.tableContainer}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, styles.itemColumn]}>
+                Item
+              </Text>
+              <Text style={[styles.tableHeaderText, styles.qtyColumn]}>
+                Qty
+              </Text>
+              <Text style={[styles.tableHeaderText, styles.priceColumn]}>
+                Price
+              </Text>
+              <Text style={[styles.tableHeaderText, styles.discountColumn]}>
+                Disc%
+              </Text>
+              <Text style={[styles.tableHeaderText, styles.totalColumn]}>
+                Total
+              </Text>
+              <View style={styles.editColumn} />
+            </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-            <ShareIcon size={20} color="#8B5CF6" />
-            <Text style={styles.actionButtonText}>Share</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.actionButton} onPress={handleDownloadPDF}>
-            <Download size={20} color="#8B5CF6" />
-            <Text style={styles.actionButtonText}>Download PDF</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.actionButton} onPress={handlePrint}>
-            <Printer size={20} color="#8B5CF6" />
-            <Text style={styles.actionButtonText}>Print</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+            {items.map((item, index) => {
+              const isEditing = editingIndex === index;
+              const itemTotal =
+                item.unit_price * item.quantity -
+                (item.unit_price *
+                  item.quantity *
+                  (item.defaultDiscount || 0)) /
+                  100;
+
+              return (
+                <View
+                  key={`item-${index}-${item.itemNumber}`}
+                  style={[
+                    styles.tableRow,
+                    index === items.length - 1 && styles.lastRow,
+                    isEditing && styles.editingRow,
+                  ]}
+                >
+                  <View style={styles.itemColumn}>
+                    <Text style={styles.itemName} numberOfLines={2}>
+                      {item.itemId
+                        ? `${item.itemId} ${item.itemName}`
+                        : item.itemName}
+                    </Text>
+                    <Text style={styles.itemNumber}>
+                      Item #{item.itemNumber}
+                    </Text>
+                  </View>
+
+                  <View style={styles.qtyColumn}>
+                    {isEditing ? (
+                      <TextInput
+                        style={styles.editInput}
+                        value={editingQuantity}
+                        onChangeText={setEditingQuantity}
+                        keyboardType="numeric"
+                        placeholder="Qty"
+                      />
+                    ) : (
+                      <Text style={styles.tableText}>{item.quantity || 0}</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.priceColumn}>
+                    {isEditing ? (
+                      <TextInput
+                        style={styles.editInput}
+                        value={editingPrice}
+                        onChangeText={setEditingPrice}
+                        keyboardType="numeric"
+                        placeholder="Price"
+                      />
+                    ) : (
+                      <Text style={styles.tableText}>
+                        {item.unit_price
+                          ? formatCurrency(item.unit_price)
+                          : '₹0'}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={styles.discountColumn}>
+                    {isEditing ? (
+                      <TextInput
+                        style={styles.editInput}
+                        value={editingDiscount}
+                        onChangeText={setEditingDiscount}
+                        keyboardType="numeric"
+                        placeholder="0"
+                      />
+                    ) : (
+                      <Text style={styles.tableText}>
+                        {typeof item.defaultDiscount === 'number'
+                          ? `${item.defaultDiscount}%`
+                          : '0%'}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={styles.totalColumn}>
+                    <Text style={styles.totalText}>
+                      {formatCurrency(itemTotal)}
+                    </Text>
+                  </View>
+
+                  {isEditing ? (
+                    <View style={styles.editActionsColumn}>
+                      <TouchableOpacity
+                        style={styles.saveButton}
+                        onPress={saveEditingRow}
+                      >
+                        <Check size={14} color="#10B981" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={cancelEditingRow}
+                      >
+                        <X size={14} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.editColumn}
+                      onPress={() => startEditingRow(item, index)}
+                    >
+                      <Edit size={14} color="#8B5CF6" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Summary */}
+          <View style={styles.summaryContainer}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Subtotal:</Text>
+              <Text style={styles.summaryValue}>
+                {formatCurrency(quotation.subtotal)}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <View style={styles.gstRow}>
+                <Text style={styles.summaryLabel}>Global Discount (</Text>
+                <TextInput
+                  style={styles.gstInput}
+                  value={String(globalDiscount)}
+                  onChangeText={(text) => setGlobalDiscount(Number(text) || 0)}
+                  keyboardType="numeric"
+                />
+                <Text style={styles.summaryLabel}>%):</Text>
+              </View>
+              <Text style={styles.summaryValue}>
+                {formatCurrency(
+                  (quotation.subtotal * (globalDiscount || 0)) / 100
+                )}
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <View style={styles.gstRow}>
+                <Text style={styles.summaryLabel}>GST (</Text>
+                <TextInput
+                  style={styles.gstInput}
+                  value={String(gstRate)}
+                  onChangeText={(text) => setGstRate(Number(text) || 0)}
+                  keyboardType="numeric"
+                />
+                <Text style={styles.summaryLabel}>%):</Text>
+              </View>
+              <Text style={styles.summaryValue}>
+                {formatCurrency(quotation.gst_amount)}
+              </Text>
+            </View>
+            <View style={[styles.summaryRow, styles.grandTotalRow]}>
+              <Text style={styles.grandTotalLabel}>Total:</Text>
+              <Text style={styles.grandTotalValue}>
+                {formatCurrency(quotation.total_amount)}
+              </Text>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtons}>
+            <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
+              <ShareIcon size={20} color="#8B5CF6" />
+              <Text style={styles.actionButtonText}>Share</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleDownloadPDF}
+            >
+              <Download size={20} color="#8B5CF6" />
+              <Text style={styles.actionButtonText}>Download PDF</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButton} onPress={handlePrint}>
+              <Printer size={20} color="#8B5CF6" />
+              <Text style={styles.actionButtonText}>Print</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
       <Toast />
     </SafeAreaView>
   );
@@ -356,6 +621,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  keyboardView: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -457,11 +725,12 @@ const styles = StyleSheet.create({
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     backgroundColor: '#F9FAFB',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    gap: 6,
   },
   tableHeaderText: {
     fontSize: 10,
@@ -473,50 +742,98 @@ const styles = StyleSheet.create({
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
+    gap: 6,
   },
   lastRow: {
     borderBottomWidth: 0,
   },
   itemColumn: {
-    flex: 2.4,
+    flex: 2.8,
   },
   qtyColumn: {
-    flex: 0.8,
+    width: 55,
     alignItems: 'center',
   },
-  brandColumn: {
-    flex: 1.1,
-    alignItems: 'flex-start',
-    paddingLeft: 8,
-  },
   priceColumn: {
-    flex: 1.0,
-    alignItems: 'flex-end',
-    paddingRight: 12,
+    width: 70,
+    alignItems: 'center',
   },
   discountColumn: {
-    flex: 1.2,
+    width: 55,
+    alignItems: 'center',
+  },
+  totalColumn: {
+    width: 80,
     alignItems: 'flex-end',
-    paddingRight: 12,
+  },
+  editColumn: {
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   itemName: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 2,
+    marginBottom: 1,
+    lineHeight: 14,
   },
   itemNumber: {
-    fontSize: 11,
+    fontSize: 9,
     color: '#9CA3AF',
   },
   tableText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     color: '#374151',
+  },
+  totalText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  editingRow: {
+    backgroundColor: '#F3F4F6',
+  },
+  editInput: {
+    fontSize: 10,
+    color: '#374151',
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    backgroundColor: '#FFFFFF',
+    textAlign: 'center',
+    minWidth: 45,
+    height: 28,
+  },
+  editActionsColumn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    width: 60,
+    justifyContent: 'center',
+  },
+  saveButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   summaryContainer: {
     backgroundColor: '#FFFFFF',
@@ -560,6 +877,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#8B5CF6',
+  },
+  gstRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  gstInput: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#6B7280',
+    borderBottomWidth: 1,
+    borderBottomColor: '#8B5CF6',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    minWidth: 30,
+    textAlign: 'center',
   },
   actionButtons: {
     flexDirection: 'row',

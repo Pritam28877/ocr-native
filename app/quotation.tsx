@@ -1,7 +1,25 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Share,
+  TextInput,
+} from 'react-native';
 import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Plus, Edit3 as Edit, User, Download, Share as ShareIcon } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Plus,
+  Edit3 as Edit,
+  User,
+  Download,
+  Share as ShareIcon,
+  Check,
+  X,
+} from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as MediaLibrary from 'expo-media-library';
@@ -20,11 +38,10 @@ interface QuotationItem {
   total: number;
 }
 
-
 export default function ProductListScreen() {
-  const { imageUri, processingData, updatedItem } = useLocalSearchParams<{ 
-    imageUri?: string; 
-    processingData?: string; 
+  const { imageUri, processingData, updatedItem } = useLocalSearchParams<{
+    imageUri?: string;
+    processingData?: string;
     updatedItem?: string;
   }>();
   const [hasMediaPerm, setHasMediaPerm] = useState<boolean>(false);
@@ -33,24 +50,69 @@ export default function ProductListScreen() {
   const editedItems = useQuoteStore((s) => s.editedItems);
   const setProducts = useQuoteStore((s) => s.setProducts);
 
-  const openEditForProduct = (product: any) => {
-    // Check if this product has been edited before
+  // Inline editing state
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState<string>('');
+  const [editingQuantity, setEditingQuantity] = useState<string>('');
+
+  const startEditingRow = (product: any, index: number) => {
     const editedItem = editedItems[product.itemName];
-    
-    // Attempt to extract a numeric quantity if present, fallback to 1
-    const qtyMatch = String(product.itemQuantity ?? '').match(/\d+/);
-    const qty = qtyMatch ? qtyMatch[0] : '1';
-    
-    console.log('Opening edit for product:', product.itemName);
-    router.push({
-      pathname: '/item-edit',
-      params: {
-        name: editedItem ? editedItem.name : product.itemName,
-        quantity: editedItem ? String(editedItem.quantity) : qty,
-        price: editedItem ? String(editedItem.price) : '0',
-        gst: editedItem ? String(editedItem.gst) : '18'
+
+    // Get current name
+    const currentName =
+      product.itemName && product.itemId
+        ? `${product.itemName}-${product.itemId}`
+        : product.itemName || product.itemId || 'Empty Row';
+
+    // Get current quantity
+    const currentQty = editedItem
+      ? String(editedItem.quantity || '')
+      : product.itemQuantity
+      ? String(product.itemQuantity)
+      : '';
+
+    setEditingIndex(index);
+    setEditingName(currentName);
+    setEditingQuantity(currentQty);
+  };
+
+  const saveEditingRow = (product: any) => {
+    // Update the product in the store
+    const updatedProducts = [...ocrProducts];
+    const productToUpdate = updatedProducts[editingIndex!];
+
+    if (productToUpdate) {
+      // Parse the name - if it contains '-', split it
+      const nameParts = editingName.split('-');
+      if (nameParts.length > 1) {
+        productToUpdate.itemName = nameParts[0].trim();
+        productToUpdate.itemId = nameParts[1].trim();
+      } else {
+        productToUpdate.itemName = editingName.trim();
       }
+
+      productToUpdate.itemQuantity = editingQuantity || '0';
+
+      setProducts(updatedProducts);
+    }
+
+    // Clear editing state
+    setEditingIndex(null);
+    setEditingName('');
+    setEditingQuantity('');
+
+    Toast.show({
+      type: 'success',
+      text1: 'Item Updated',
+      text2: 'Changes saved successfully',
+      position: 'bottom',
     });
+  };
+
+  const cancelEditingRow = () => {
+    setEditingIndex(null);
+    setEditingName('');
+    setEditingQuantity('');
   };
 
   // Using flat items from fixed API format
@@ -87,7 +149,9 @@ export default function ProductListScreen() {
   }, [displayProducts]);
   // Edited items that are not part of OCR products (user-added standalone items)
   const standaloneEditedItems = useMemo(() => {
-    return Object.values(editedItems || {}).filter((it) => !knownOcrNames.has(it.name));
+    return Object.values(editedItems || {}).filter(
+      (it) => !knownOcrNames.has(it.name)
+    );
   }, [editedItems, knownOcrNames]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -96,12 +160,20 @@ export default function ProductListScreen() {
     try {
       setIsSubmitting(true);
 
+      Toast.show({
+        type: 'info',
+        text1: 'Processing...',
+        text2: 'Submitting product list to backend',
+        position: 'bottom',
+      });
+
       // Build request body for /api/ocr/process-data from current products and edits
       const originalData = (displayProducts || []).map((product) => {
         const editedItem = editedItems[product.itemName];
-        const fallbackQty = typeof product.itemQuantity === 'string'
-          ? Number((String(product.itemQuantity).match(/\d+/) || ['0'])[0])
-          : Number(product.itemQuantity || 0);
+        const fallbackQty =
+          typeof product.itemQuantity === 'string'
+            ? Number((String(product.itemQuantity).match(/\d+/) || ['0'])[0])
+            : Number(product.itemQuantity || 0);
         const quantity = editedItem ? Number(editedItem.quantity) : fallbackQty;
         return {
           itemNumber: product.itemNumber,
@@ -112,29 +184,71 @@ export default function ProductListScreen() {
         };
       });
 
-      const processDataUrl = new URL('/api/ocr/process-data', OCR_API_URL).toString();
+      const processDataUrl = new URL(
+        '/api/ocr/process-data',
+        OCR_API_URL
+      ).toString();
+
+      console.log(
+        '📦 Current Display Products:',
+        JSON.stringify(displayProducts, null, 2)
+      );
+      console.log(
+        '📝 Edited Items from Store:',
+        JSON.stringify(editedItems, null, 2)
+      );
+      console.log(
+        '🚀 Sending data to API:',
+        JSON.stringify(originalData, null, 2)
+      );
+      console.log('🔗 API URL:', processDataUrl);
+      const requestBody = { data: originalData };
+      console.log('📤 Request Body:', JSON.stringify(requestBody, null, 2));
+
       const res = await fetch(processDataUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OCR_API_TOKEN}` },
-        body: JSON.stringify({ data: originalData }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OCR_API_TOKEN}`,
+        },
+        body: JSON.stringify(requestBody),
       });
+
+      console.log('📡 API Response Status:', res.status, res.statusText);
+
       if (!res.ok) {
         const text = await res.text().catch(() => '');
+        console.error('❌ API Error Response:', text);
         throw new Error(`Process-data API error ${res.status}: ${text}`);
       }
       const matchResult = await res.json();
-      console.log('Match result:', JSON.stringify(matchResult, null, 2));
+      console.log('✅ API Match Result:', JSON.stringify(matchResult, null, 2));
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success!',
+        text2: 'Product list processed successfully',
+        position: 'bottom',
+      });
 
       router.push({
         pathname: '/final-quotation',
         params: {
           matchData: JSON.stringify(matchResult),
           originalData: JSON.stringify(originalData),
-        }
+        },
       });
     } catch (error) {
-      console.error('Error preparing final quotation:', error);
-      Alert.alert('Error', 'Failed to prepare final quotation');
+      console.error('❌ Error preparing final quotation:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Submission Failed',
+        text2:
+          error instanceof Error
+            ? error.message
+            : 'Failed to prepare final quotation',
+        position: 'bottom',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -144,7 +258,7 @@ export default function ProductListScreen() {
     try {
       // Generate PDF content (placeholder - you'll need to implement actual PDF generation)
       const pdfContent = generateQuotationPdf();
-      
+
       await Share.share({
         message: 'Quotation PDF',
         title: 'Quotation',
@@ -171,7 +285,10 @@ export default function ProductListScreen() {
       if (!hasMediaPerm) {
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission required', 'Media library permission is needed to save the image.');
+          Alert.alert(
+            'Permission required',
+            'Media library permission is needed to save the image.'
+          );
           return;
         }
         setHasMediaPerm(true);
@@ -194,7 +311,7 @@ export default function ProductListScreen() {
         quantity: String(item.quantity),
         price: '0',
         gst: String(item.gst),
-      }
+      },
     });
   };
 
@@ -206,16 +323,20 @@ export default function ProductListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#8B5CF6', '#A855F7']}
-        style={styles.header}>
+      <LinearGradient colors={['#8B5CF6', '#A855F7']} style={styles.header}>
         <View style={styles.headerContent}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
             <ArrowLeft size={20} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Product List</Text>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.headerAction} onPress={() => router.push('/(tabs)')}>
+            <TouchableOpacity
+              style={styles.headerAction}
+              onPress={() => router.push('/(tabs)')}
+            >
               <Plus size={18} color="#FFFFFF" />
               <Text style={styles.headerActionText}>New Quote</Text>
             </TouchableOpacity>
@@ -233,7 +354,10 @@ export default function ProductListScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.tableContainer}>
           <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeaderText, styles.itemColumn]}>Item</Text>
+            <Text style={[styles.tableHeaderText, styles.noColumn]}>No</Text>
+            <Text style={[styles.tableHeaderText, styles.itemColumn]}>
+              Item
+            </Text>
             <Text style={[styles.tableHeaderText, styles.qtyColumn]}>Qty</Text>
             <View style={styles.editColumn} />
           </View>
@@ -242,32 +366,100 @@ export default function ProductListScreen() {
             displayProducts.map((product, index) => {
               // Check if this product has been edited
               const editedItem = editedItems[product.itemName];
+              const isEditing = editingIndex === index;
 
               // No sub-items aggregation; rely on edited or flat total_quantity
 
               // No price or total display needed for Product List
-              
+
               return (
-                <View key={String(product.itemNumber)}>
-                  <View style={[styles.tableRow, index === displayProducts.length - 1 && styles.lastRow]}>
+                <View key={`product-${index}-${product.itemNumber || 'empty'}`}>
+                  <View
+                    style={[
+                      styles.tableRow,
+                      index === displayProducts.length - 1 && styles.lastRow,
+                      isEditing && styles.editingRow,
+                    ]}
+                  >
+                    <View style={styles.noColumn}>
+                      <Text style={styles.itemName}>{index + 1}</Text>
+                    </View>
                     <View style={styles.itemColumn}>
-                      <Text style={styles.itemName}>
-                        {product.itemId ? `${product.itemId} ${product.itemName}` : product.itemName}
-                      </Text>
-                      <Text style={styles.itemDescription}>Item #{product.itemNumber}</Text>
-                      {(() => {
-                        const desc = product.itemDescription || '';
-                        return desc ? (<Text style={styles.itemDescription}>{desc}</Text>) : null;
-                      })()}
+                      {isEditing ? (
+                        <TextInput
+                          style={styles.editInput}
+                          value={editingName}
+                          onChangeText={setEditingName}
+                          placeholder="Item name"
+                          autoFocus
+                        />
+                      ) : (
+                        <>
+                          <Text style={styles.itemName}>
+                            {product.itemName && product.itemId
+                              ? `${product.itemName}-${product.itemId}`
+                              : product.itemName
+                              ? product.itemName
+                              : product.itemId
+                              ? product.itemId
+                              : 'Empty Row'}
+                          </Text>
+                          {product.itemNumber && (
+                            <Text style={styles.itemDescription}>
+                              Item #{product.itemNumber}
+                            </Text>
+                          )}
+                          {(() => {
+                            const desc = product.itemDescription || '';
+                            return desc ? (
+                              <Text style={styles.itemDescription}>{desc}</Text>
+                            ) : null;
+                          })()}
+                        </>
+                      )}
                     </View>
                     <View style={styles.qtyColumn}>
-                      <Text style={styles.tableText}>
-                        {editedItem ? String(editedItem.quantity) : String(product.itemQuantity)}
-                      </Text>
+                      {isEditing ? (
+                        <TextInput
+                          style={styles.editInputQty}
+                          value={editingQuantity}
+                          onChangeText={setEditingQuantity}
+                          placeholder="Qty"
+                          keyboardType="numeric"
+                        />
+                      ) : (
+                        <Text style={styles.tableText}>
+                          {editedItem
+                            ? String(editedItem.quantity || '')
+                            : product.itemQuantity
+                            ? String(product.itemQuantity)
+                            : ''}
+                        </Text>
+                      )}
                     </View>
-                    <TouchableOpacity style={styles.editColumn} onPress={() => openEditForProduct(product)}>
-                      <Edit size={16} color="#8B5CF6" />
-                    </TouchableOpacity>
+                    {isEditing ? (
+                      <View style={styles.editActionsColumn}>
+                        <TouchableOpacity
+                          style={styles.saveButton}
+                          onPress={() => saveEditingRow(product)}
+                        >
+                          <Check size={16} color="#10B981" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.cancelButton}
+                          onPress={cancelEditingRow}
+                        >
+                          <X size={16} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.editColumn}
+                        onPress={() => startEditingRow(product, index)}
+                      >
+                        <Edit size={16} color="#8B5CF6" />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               );
@@ -275,14 +467,16 @@ export default function ProductListScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No products found</Text>
-              <Text style={styles.emptyStateSubtext}>Upload an image to extract hardware products</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Upload an image to extract hardware products
+              </Text>
             </View>
           )}
 
           {/* Standalone user-added items */}
-          {standaloneEditedItems.length > 0 && (
+          {standaloneEditedItems.length > 0 &&
             standaloneEditedItems.map((it, idx) => (
-              <View key={`manual-${idx}`} style={styles.tableRow}>
+              <View key={`manual-${idx}-${it.name}`} style={styles.tableRow}>
                 <View style={styles.itemColumn}>
                   <Text style={styles.itemName}>{it.name}</Text>
                   <Text style={styles.itemDescription}>Custom Item</Text>
@@ -292,22 +486,37 @@ export default function ProductListScreen() {
                 </View>
                 <TouchableOpacity
                   style={styles.editColumn}
-                  onPress={() => handleEditItem({ id: '', name: it.name, description: '', quantity: it.quantity, price: 0, gst: 0, total: 0 })}
+                  onPress={() =>
+                    handleEditItem({
+                      id: '',
+                      name: it.name,
+                      description: '',
+                      quantity: it.quantity,
+                      price: 0,
+                      gst: 0,
+                      total: 0,
+                    })
+                  }
                 >
                   <Edit size={16} color="#8B5CF6" />
                 </TouchableOpacity>
               </View>
-            ))
-          )}
-          <TouchableOpacity style={styles.addItemButton} onPress={handleAddItem}>
+            ))}
+          <TouchableOpacity
+            style={styles.addItemButton}
+            onPress={handleAddItem}
+          >
             <Plus size={20} color="#8B5CF6" />
             <Text style={styles.addItemText}>Add Item</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={[styles.reviewButton, isSubmitting && styles.submittingButton]} 
+          <TouchableOpacity
+            style={[
+              styles.reviewButton,
+              isSubmitting && styles.submittingButton,
+            ]}
             onPress={handleSubmitToBackend}
             disabled={isSubmitting}
           >
@@ -315,14 +524,17 @@ export default function ProductListScreen() {
               {isSubmitting ? 'Submitting...' : 'Submit'}
             </Text>
           </TouchableOpacity>
-          
+
           <View style={styles.bottomButtons}>
             <TouchableOpacity style={styles.pdfButton} onPress={handleSharePdf}>
               <ShareIcon size={18} color="#FFFFFF" />
               <Text style={styles.pdfButtonText}>Share PDF</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.whatsappButton} onPress={handleDownloadOcrImage}>
+
+            <TouchableOpacity
+              style={styles.whatsappButton}
+              onPress={handleDownloadOcrImage}
+            >
               <ShareIcon size={18} color="#FFFFFF" />
               <Text style={styles.whatsappButtonText}>Download Image</Text>
             </TouchableOpacity>
@@ -400,11 +612,12 @@ const styles = StyleSheet.create({
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     backgroundColor: '#F9FAFB',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    gap: 8,
   },
   tableHeaderText: {
     fontSize: 12,
@@ -416,21 +629,28 @@ const styles = StyleSheet.create({
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
+    gap: 8,
   },
   lastRow: {
     borderBottomWidth: 0,
   },
+  noColumn: {
+    width: 40,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
   itemColumn: {
-    flex: 3,
+    flex: 2,
     paddingRight: 8,
   },
   qtyColumn: {
-    flex: 1,
+    width: 60,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   priceColumn: {
     flex: 1.2,
@@ -445,7 +665,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   editColumn: {
-    width: 30,
+    width: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -610,5 +830,54 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9CA3AF',
     textAlign: 'center',
+  },
+  editingRow: {
+    backgroundColor: '#F3F4F6',
+  },
+  editInput: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  editInputQty: {
+    fontSize: 10,
+    color: '#374151',
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+    textAlign: 'center',
+    minWidth: 50,
+  },
+  editActionsColumn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    width: 68,
+    justifyContent: 'center',
+  },
+  saveButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

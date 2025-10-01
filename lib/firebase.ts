@@ -4,15 +4,24 @@ import { getFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase configuration from google-services.json
-const firebaseConfig = {
-  apiKey: "AIzaSyB9YZUNkp-k7b6yubU_1MR4XRQktDOt1nA",
-  authDomain: "encoded-joy-472514-n7.firebaseapp.com",
-  projectId: "encoded-joy-472514-n7",
-  storageBucket: "encoded-joy-472514-n7.firebasestorage.app",
-  messagingSenderId: "779116345230",
-  appId: "1:779116345230:android:35af16ae21fe61236416df"
-};
+// const firebaseConfig = {
+//   apiKey: "AIzaSyB9YZUNkp-k7b6yubU_1MR4XRQktDOt1nA",
+//   authDomain: "encoded-joy-472514-n7.firebaseapp.com",
+//   projectId: "encoded-joy-472514-n7",
+//   storageBucket: "encoded-joy-472514-n7.firebasestorage.app",
+//   messagingSenderId: "779116345230",
+//   appId: "1:779116345230:android:35af16ae21fe61236416df"
+// };
 
+const firebaseConfig = {
+  apiKey: 'AIzaSyA4dlUUcF1jxiFKO99v5u1mNdBDykP5I9I',
+  authDomain: 'oceanic-depth-473615-v3.firebaseapp.com',
+  projectId: 'oceanic-depth-473615-v3',
+  storageBucket: 'oceanic-depth-473615-v3.firebasestorage.app',
+  messagingSenderId: '329174454207',
+  appId: '1:329174454207:web:43039b6a0cf46754dd1b0a',
+  measurementId: 'G-5XCPXW85YS',
+};
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
